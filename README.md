@@ -4,6 +4,26 @@
 
 ---
 
+## What It's For
+
+**Remember things across sessions:**
+- Your AI assistant remembers your preferences, facts, and decisions
+- Search memories with natural language ("what did I say yesterday?")
+- Never repeat the same information twice
+
+**Use cases:**
+- **Personal Assistant**: "Remember I'm vegetarian" → AI remembers for restaurant suggestions
+- **Developer**: "I prefer TypeScript" → AI suggests TS for new projects
+- **Notes**: "Recordá que tengo reunión el viernes" → AI reminds you
+- **Preferences**: "I like dark mode" → AI configures UI accordingly
+- **Facts**: "I live in Buenos Aires" → AI adjusts timezone/suggestions
+- **Decisions**: "I chose AWS over GCP" → AI remembers for future architecture discussions
+
+**Auto-capture from chat:**
+Just say "Remember..." and it's saved automatically with the right type.
+
+---
+
 ## Install
 
 **Windows (PowerShell)**
@@ -119,14 +139,6 @@ Auto-detects type from content. No manual tags needed.
 
 - OpenClaw 2026.3.7+
 - Node.js 22+
-
----
-
-## Links
-
-- **Repository:** https://github.com/pnll1991/lobstermind-memory
-- **Issues:** https://github.com/pnll1991/lobstermind-memory/issues
-- **Discord:** https://discord.gg/clawd
 
 ---
 
