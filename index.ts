@@ -1327,7 +1327,7 @@ const lobsterMindPlugin = {
             .action(() => {
               const total = db.prepare('SELECT COUNT(*) as count FROM memories').get() as any;
               const byType = db.prepare('SELECT type, COUNT(*) as count FROM memories GROUP BY type').all();
-              const byTags = db.prepare('SELECT tags FROM memories WHERE tags IS NOT NULL AND tags != ""').all();
+              const byTags = db.prepare("SELECT tags FROM memories WHERE tags IS NOT NULL AND tags != ''").all();
               const oldest = db.prepare('SELECT MIN(created_at) as date FROM memories').get() as any;
               const newest = db.prepare('SELECT MAX(created_at) as date FROM memories').get() as any;
               
@@ -1364,7 +1364,7 @@ const lobsterMindPlugin = {
             .command('tags')
             .description('List all tags')
             .action(() => {
-              const withTags = db.prepare('SELECT tags FROM memories WHERE tags IS NOT NULL AND tags != ""').all();
+              const withTags = db.prepare("SELECT tags FROM memories WHERE tags IS NOT NULL AND tags != ''").all();
               const tagCounts: {[key: string]: number} = {};
               
               withTags.forEach((row: any) => {
