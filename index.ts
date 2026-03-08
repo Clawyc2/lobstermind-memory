@@ -13,6 +13,11 @@
  * License: MIT
  */
 
+import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
+import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
+import { join } from 'path';
+
 const lobsterMindPlugin = {
   id: 'lobstermind-memory',
   name: 'LobsterMind Memory',
