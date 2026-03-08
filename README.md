@@ -64,6 +64,14 @@ LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional pa
 
 ## ⚡ LobsterMind vs Gigabrain - Comparación Directa
 
+### Nota Importante | Important Note
+
+**English:**  
+Both LobsterMind and Gigabrain aim to solve long-term memory for OpenClaw. This comparison is meant to help you choose the right tool for your needs — not to diminish either project. Gigabrain has an ambitious vision and comprehensive feature set. LobsterMind prioritizes simplicity and immediate usability.
+
+**Español:**  
+Tanto LobsterMind como Gigabrain buscan resolver la memoria a largo plazo para OpenClaw. Esta comparación tiene como objetivo ayudarte a elegir la herramienta adecuada para tus necesidades, no disminuir ninguno de los proyectos. Gigabrain tiene una visión ambiciosa y un conjunto completo de funciones. LobsterMind prioriza la simplicidad y usabilidad inmediata.
+
 ### Tabla Rápida
 
 | Característica | **LobsterMind** | **Gigabrain** |
@@ -81,13 +89,19 @@ LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional pa
 
 ### Comparación Detallada
 
-#### 🎯 Filosofía de Diseño
+#### 🎯 Filosofía de Diseño | Design Philosophy
 
 **LobsterMind:**
 > "Hagamos algo que funcione, sea simple, y cualquier persona pueda instalar en 1 minuto"
+>
+> "Let's make something that works, is simple, and anyone can install in 1 minute"
 
 **Gigabrain:**
-> "Construyamos el sistema de memoria más completo y académico, aunque requiera un PhD para usarlo"
+> "Construyamos el sistema de memoria más completo y académico, con todos los features imaginables, aunque requiera configuración avanzada"
+>
+> "Let's build the most comprehensive and academic memory system, with every imaginable feature, even if it requires advanced configuration"
+
+**Ambos son válidos. Depende de lo que necesitás.** | **Both are valid. Depends on what you need.**
 
 #### 📦 Complejidad
 
@@ -153,38 +167,52 @@ openclaw memories --add "Tu memoria"
 openclaw memories --search "búsqueda"
 ```
 
-### 📊 ¿Cuál Elegir?
+### 📊 ¿Cuál Elegir? | Which to Choose?
 
-| Si querés... | Elegí... |
-|--------------|----------|
-| Investigar sistemas de memoria | Gigabrain |
-| Arquitectura compleja académica | Gigabrain |
-| Control total de cada setting | Gigabrain |
-| **Que funcione YA** | **LobsterMind** |
-| **Instalar en 1 minuto** | **LobsterMind** |
-| **Entender tu plugin** | **LobsterMind** |
-| **Windows sin dolor** | **LobsterMind** |
-| **Sin Python/Ollama** | **LobsterMind** |
-| **Simplicidad** | **LobsterMind** |
+| Si querés... | If you want... | Elegí... | Choose... |
+|--------------|----------------|----------|-----------|
+| Investigar sistemas de memoria | Research memory systems | Gigabrain | Gigabrain |
+| Arquitectura compleja académica | Academic complex architecture | Gigabrain | Gigabrain |
+| Control total de cada setting | Full control of every setting | Gigabrain | Gigabrain |
+| Features avanzados (audit, entity graph, web console) | Advanced features | Gigabrain | Gigabrain |
+| **Que funcione YA** | **That works NOW** | **LobsterMind** | **LobsterMind** |
+| **Instalar en 1 minuto** | **Install in 1 minute** | **LobsterMind** | **LobsterMind** |
+| **Entender tu plugin** | **Understand your plugin** | **LobsterMind** | **LobsterMind** |
+| **Windows sin dolor** | **Windows without pain** | **LobsterMind** | **LobsterMind** |
+| **Sin Python/Ollama** | **No Python/Ollama** | **LobsterMind** | **LobsterMind** |
+| **Simplicidad** | **Simplicity** | **LobsterMind** | **LobsterMind** |
+| **95% de casos con 10% complejidad** | **95% use cases with 10% complexity** | **LobsterMind** | **LobsterMind** |
 
-### 💬 Para los Escépticos
+### 💬 Para los Escépticos | For the Skeptics
 
 > "Pero Gigabrain tiene más features..."
+>
+> "But Gigabrain has more features..."
 
-**Respuesta:** ¿Cuántas usás realmente?
+**Respuesta | Answer:** ¿Cuántas usás realmente? | How many do you actually use?
 
-- ❌ Web console: ¿Quién la usa para memoria personal?
-- ❌ Benchmarking: ¿Necesitás benchmarks en producción?
-- ❌ Audit pipeline: ¿Archivás/comprimís memorias manualmente?
-- ❌ Entity graph: ¿Realmente necesitás tracking de personas?
-- ❌ Nightly metrics: ¿Leés reports de métricas?
+**Gigabrain incluye:**
+- Web console (FastAPI dashboard)
+- Benchmarking harness
+- Nightly audit pipeline
+- Entity relationship graph
+- Memory compression/archiving
+- Vault mirroring with dual-surface
+- Review queues
+- Metrics reports
+
+**¿Necesitás todo eso para memoria personal?** | **Do you need all that for personal memory?**
+
+Probablemente no. | Probably not.
 
 **LobsterMind tiene lo que importa:**
-- ✅ Guardar memorias
-- ✅ Buscar memorias
-- ✅ Ver memorias
-- ✅ Sync con Obsidian
-- ✅ Funciona siempre
+- ✅ Guardar memorias | Save memories
+- ✅ Buscar memorias | Search memories
+- ✅ Ver memorias | View memories
+- ✅ Sync con Obsidian | Obsidian sync
+- ✅ Funciona siempre | Works always
+
+**Si después necesitás features avanzados, migrá a Gigabrain.** | **If you later need advanced features, migrate to Gigabrain.**
 
 ---
 
@@ -226,6 +254,8 @@ Muchos plugins de memoria para OpenClaw (como [Gigabrain](https://github.com/leg
 4. ❌ **Implementación Incompleta**: Tienen hooks definidos pero nunca los registran realmente con el runtime de OpenClaw
 5. ❌ **Sin Integración CLI**: El registro de comandos falla debido al uso incorrecto de la API
 6. ❌ **Problemas de Plataforma**: No manejan rutas de Windows, permisos, o compilación de módulos nativos de Node.js
+
+**Nota importante:** Gigabrain tiene una visión excelente para memoria a largo plazo en OpenClaw. LobsterMind está inspirado en esa visión, pero toma un enfoque técnico diferente: minimalista, práctico y sin dependencias complejas. Ambos proyectos buscan resolver el mismo problema desde ángulos distintos.
 
 **Por qué LobsterMind Funciona:**
 
@@ -591,7 +621,34 @@ Built with 🦞 for the OpenClaw community.
 
 ## 🙏 Acknowledgments | Agradecimientos
 
-- Inspired by [Gigabrain](https://github.com/legendaryvibecoder/gigabrain) concept
+**English:**
+
+LobsterMind is inspired by the [Gigabrain](https://github.com/legendaryvibecoder/gigabrain) project's vision for long-term memory in OpenClaw. Both projects aim to solve the same fundamental problem: giving AI assistants persistent, queryable memory across sessions.
+
+The key difference is approach:
+- **Gigabrain** is comprehensive, academic, and feature-rich (2000+ lines, Python + Node.js, Ollama, web console, nightly audits)
+- **LobsterMind** is minimal, practical, and works-out-of-the-box (298 lines, Node.js only, no complex dependencies)
+
+Neither is "better" — they serve different needs:
+- Choose **Gigabrain** if you want maximum control, don't mind complex setup, and need advanced features like audit pipelines, entity graphs, and web consoles
+- Choose **LobsterMind** if you want something that works in 1 minute, requires zero config, and covers 95% of use cases with 10% of the complexity
+
+Thanks to the Gigabrain project for proving that long-term memory for OpenClaw is not just possible, but necessary.
+
+**Español:**
+
+LobsterMind está inspirado en la visión del proyecto [Gigabrain](https://github.com/legendaryvibecoder/gigabrain) para memoria a largo plazo en OpenClaw. Ambos proyectos buscan resolver el mismo problema fundamental: dar a los asistentes de IA memoria persistente y consultable entre sesiones.
+
+La diferencia clave es el enfoque:
+- **Gigabrain** es completo, académico y rico en funciones (2000+ líneas, Python + Node.js, Ollama, consola web, auditorías nightly)
+- **LobsterMind** es minimal, práctico y funciona desde el inicio (298 líneas, solo Node.js, sin dependencias complejas)
+
+Ninguno es "mejor" — sirven necesidades diferentes:
+- Elegí **Gigabrain** si querés máximo control, no te importa setup complejo, y necesitás features avanzados como audit pipelines, entity graphs, y consolas web
+- Elegí **LobsterMind** si querés algo que funcione en 1 minuto, requiere cero config, y cubre 95% de casos de uso con 10% de la complejidad
+
+Gracias al proyecto Gigabrain por demostrar que la memoria a largo plazo para OpenClaw no solo es posible, sino necesaria.
+
 - Built on [OpenClaw](https://github.com/openclaw/openclaw) plugin system
 - Thanks to the OpenClaw community for the plugin SDK
 
