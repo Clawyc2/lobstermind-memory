@@ -88,7 +88,7 @@ const lobsterMindPlugin = {
   
   console.log('[lobstermind] Initializing database...');
   
-  // Initialize database
+  // Initialize database (WITHOUT tags index first)
   let db: any;
   try {
     db = new Database(dbPath);
@@ -98,13 +98,13 @@ const lobsterMindPlugin = {
     throw err;
   }
   
+  // Create tables without tags first (backward compatible)
   db.exec(`
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL,
       type TEXT NOT NULL,
       confidence REAL NOT NULL,
-      tags TEXT,
       embedding TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -114,7 +114,6 @@ const lobsterMindPlugin = {
       content TEXT NOT NULL,
       type TEXT NOT NULL,
       confidence REAL NOT NULL,
-      tags TEXT,
       embedding TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -122,32 +121,32 @@ const lobsterMindPlugin = {
     );
     CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
     CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
-    CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories(tags);
   `);
   
-  // Migration: Add tags column if it doesn't exist (for existing databases)
+  // Migration: Add tags column if it doesn't exist
   try {
-    db.exec(`
-      ALTER TABLE memories ADD COLUMN tags TEXT;
-    `);
+    db.exec('ALTER TABLE memories ADD COLUMN tags TEXT;');
     console.log('[lobstermind] Migration: Added tags column to memories table');
   } catch (err: any) {
-    // Column already exists, that's fine
     if (!err.message.includes('duplicate column')) {
-      console.error('[lobstermind] Migration warning:', err.message);
+      console.error('[lobstermind] Migration warning (memories):', err.message);
     }
   }
   
   try {
-    db.exec(`
-      ALTER TABLE archived_memories ADD COLUMN tags TEXT;
-    `);
+    db.exec('ALTER TABLE archived_memories ADD COLUMN tags TEXT;');
     console.log('[lobstermind] Migration: Added tags column to archived_memories table');
   } catch (err: any) {
-    // Column already exists, that's fine
     if (!err.message.includes('duplicate column')) {
-      console.error('[lobstermind] Migration warning:', err.message);
+      console.error('[lobstermind] Migration warning (archived):', err.message);
     }
+  }
+  
+  // Create tags index after column exists
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories(tags);');
+  } catch (err: any) {
+    console.error('[lobstermind] Warning creating tags index:', err.message);
   }
   
   console.log('[lobstermind] Database initialized');
