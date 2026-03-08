@@ -42,7 +42,7 @@ const lobsterMindPlugin = {
   const config = api?.config || {};
   console.log('[lobstermind] Config:', JSON.stringify(config, null, 2));
   
-  const workspaceRoot = config.workspaceRoot || process.env.OPENCLAW_WORKSPACE || '<YOUR_OPENCLAW_WORKSPACE>';
+  const workspaceRoot = config.workspaceRoot || process.env.OPENCLAW_WORKSPACE || (api.runtime?.workspace || 'C:\\Users\\Paolozky\\.openclaw\\workspace');
   const memoryDir = join(workspaceRoot, 'memory');
   const dbPath = join(memoryDir, 'lobstermind-memory.db');
   
