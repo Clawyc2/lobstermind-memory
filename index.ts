@@ -963,25 +963,77 @@ const lobsterMindPlugin = {
           
           // Subcommand: backup
           memories
-            .command('backup')
-            .description('Create automatic backup')
-            .action(() => {
-              const { writeFileSync, mkdirSync } = require('fs');
+            .command('backup [destination]')
+            .description('Create automatic backup (local or cloud)')
+            .option('--to <provider>', 'Backup destination: local, gdrive, dropbox, onedrive', 'local')
+            .option('--remote-path <path>', 'Remote path for cloud backup', '/OpenClaw/LobsterMind')
+            .action((destination: string, options: any) => {
+              const { writeFileSync, mkdirSync, existsSync } = require('fs');
               const { join } = require('path');
-              
-              const backupDir = join(workspaceRoot, 'memory', 'backups');
-              if (!existsSync(backupDir)) {
-                mkdirSync(backupDir, { recursive: true });
-              }
+              const { exec } = require('child_process');
               
               const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-              const backupPath = join(backupDir, `backup-${timestamp}.json`);
+              const backupName = `backup-${timestamp}.json`;
               const memories = db.prepare('SELECT * FROM memories ORDER BY created_at DESC').all();
               
-              writeFileSync(backupPath, JSON.stringify(memories, null, 2));
-              console.log(`✓ Backup created: ${backupPath}`);
+              // Create local backup first
+              const localBackupDir = join(workspaceRoot, 'memory', 'backups');
+              if (!existsSync(localBackupDir)) {
+                mkdirSync(localBackupDir, { recursive: true });
+              }
+              const localBackupPath = join(localBackupDir, backupName);
+              writeFileSync(localBackupPath, JSON.stringify(memories, null, 2));
+              console.log(`✓ Local backup created: ${localBackupPath}`);
               console.log(`  Total memories: ${memories.length}`);
-              console.log(`  Location: ${backupDir}`);
+              
+              // Upload to cloud if requested
+              const provider = destination === '--to' ? options.to : destination;
+              
+              if (provider && provider !== 'local') {
+                const remotePath = options.remotePath || '/OpenClaw/LobsterMind';
+                console.log(`\n📤 Uploading to ${provider}...`);
+                console.log(`  Remote path: ${remotePath}`);
+                
+                // Ensure remote directory exists
+                mkdirSync(join(workspaceRoot, 'memory', 'cloud-sync'), { recursive: true });
+                const rcloneConfigPath = join(workspaceRoot, 'memory', 'cloud-sync', 'rclone.conf');
+                
+                // Check if rclone is installed
+                exec('rclone --version', (err: any) => {
+                  if (err) {
+                    console.error('\n❌ rclone not found!');
+                    console.error('\n📦 Install rclone:');
+                    console.error('   Windows: choco install rclone');
+                    console.error('   macOS:   brew install rclone');
+                    console.error('   Linux:   sudo apt install rclone');
+                    console.error('\n🔧 Then configure:');
+                    console.error('   rclone config');
+                    return;
+                  }
+                  
+                  // Upload using rclone
+                  const rcloneRemote = provider === 'gdrive' ? 'gdrive' : 
+                                      provider === 'dropbox' ? 'dropbox' : 
+                                      provider === 'onedrive' ? 'onedrive' : provider;
+                  
+                  const command = `rclone copy "${localBackupPath}" "${rcloneRemote}:${remotePath}" --progress`;
+                  
+                  exec(command, (err: any, stdout: string, stderr: string) => {
+                    if (err) {
+                      console.error(`\n❌ Upload failed: ${err.message}`);
+                      console.error('Make sure you configured rclone: rclone config');
+                      return;
+                    }
+                    
+                    console.log(`\n✓ Backup uploaded to ${provider}:`);
+                    console.log(`  ${remotePath}/${backupName}`);
+                    console.log(`  ${memories.length} memories (${(memories.length * 0.5).toFixed(1)} KB)`);
+                  });
+                });
+              } else {
+                console.log(`\n💡 Tip: Use --to gdrive to backup to Google Drive`);
+                console.log('   Install rclone: choco install rclone (Windows) or brew install rclone (macOS)');
+              }
             });
           
           // Subcommand: cleanup (Memory Expiration manual trigger)
@@ -1037,12 +1089,51 @@ const lobsterMindPlugin = {
           memories
             .command('restore <file>')
             .description('Restore memories from backup file')
+            .option('--from <provider>', 'Restore from cloud: gdrive, dropbox, onedrive')
             .option('--merge', 'Merge with existing memories (default)')
             .option('--replace', 'Delete all existing and replace with backup')
             .action(async (file: string, options: any) => {
               const { readFileSync } = require('fs');
               const { join } = require('path');
-              const fullPath = join(process.cwd(), file);
+              const { exec } = require('child_process');
+              
+              let fullPath: string;
+              
+              // Download from cloud if requested
+              if (options.from && options.from !== 'local') {
+                const provider = options.from;
+                const rcloneRemote = provider === 'gdrive' ? 'gdrive' : 
+                                    provider === 'dropbox' ? 'dropbox' : 
+                                    provider === 'onedrive' ? 'onedrive' : provider;
+                
+                console.log(`📥 Downloading from ${provider}...`);
+                
+                const cloudSyncDir = join(workspaceRoot, 'memory', 'cloud-sync');
+                if (!existsSync(cloudSyncDir)) {
+                  mkdirSync(cloudSyncDir, { recursive: true });
+                }
+                
+                fullPath = join(cloudSyncDir, file);
+                
+                // Download using rclone
+                const remotePath = `/OpenClaw/LobsterMind/${file}`;
+                const command = `rclone copy "${rcloneRemote}:${remotePath}" "${cloudSyncDir}" --progress`;
+                
+                await new Promise<void>((resolve, reject) => {
+                  exec(command, (err: any) => {
+                    if (err) {
+                      console.error(`❌ Download failed: ${err.message}`);
+                      console.error('Make sure the file exists in cloud and rclone is configured');
+                      reject(err);
+                    } else {
+                      console.log(`✓ Downloaded: ${file}`);
+                      resolve();
+                    }
+                  });
+                });
+              } else {
+                fullPath = join(process.cwd(), file);
+              }
               
               try {
                 const data = JSON.parse(readFileSync(fullPath, 'utf-8'));
@@ -1079,10 +1170,129 @@ const lobsterMindPlugin = {
                   imported++;
                 }
                 
-                console.log(`✓ Restore complete: ${imported} imported, ${skipped} skipped`);
+                console.log(`\n✓ Restore complete:`);
+                console.log(`  Imported: ${imported}`);
+                console.log(`  Skipped:  ${skipped}`);
               } catch (err: any) {
                 console.error('✗ Error reading backup file:', err.message);
               }
+            });
+          
+          // Subcommand: list-backups
+          memories
+            .command('list-backups')
+            .description('List available backups')
+            .option('--from <provider>', 'List from cloud: gdrive, dropbox, onedrive')
+            .option('--local', 'List local backups (default)')
+            .action((options: any) => {
+              const { readdirSync } = require('fs');
+              const { join } = require('path');
+              const { exec } = require('child_process');
+              
+              if (options.from && options.from !== 'local') {
+                // List from cloud
+                const provider = options.from;
+                const rcloneRemote = provider === 'gdrive' ? 'gdrive' : 
+                                    provider === 'dropbox' ? 'dropbox' : 
+                                    provider === 'onedrive' ? 'onedrive' : provider;
+                
+                console.log(`📋 Listing backups from ${provider}...\n`);
+                
+                const command = `rclone ls "${rcloneRemote}:/OpenClaw/LobsterMind" --json`;
+                
+                exec(command, (err: any, stdout: string) => {
+                  if (err) {
+                    console.error(`❌ Failed to list: ${err.message}`);
+                    console.error('Make sure rclone is configured');
+                    return;
+                  }
+                  
+                  try {
+                    const files = JSON.parse(stdout);
+                    const backupFiles = files.filter((f: any) => f.Name.endsWith('.json'));
+                    
+                    if (backupFiles.length === 0) {
+                      console.log('No backups found in cloud');
+                      return;
+                    }
+                    
+                    console.log(`Found ${backupFiles.length} backups:\n`);
+                    backupFiles.forEach((f: any, i: number) => {
+                      const size = (f.Size / 1024).toFixed(1);
+                      const date = new Date(f.ModTime).toLocaleString();
+                      console.log(`${i + 1}. ${f.Name}`);
+                      console.log(`   Size: ${size} KB | Date: ${date}`);
+                    });
+                  } catch (err: any) {
+                    console.error('Error parsing rclone output:', err.message);
+                  }
+                });
+              } else {
+                // List local backups
+                const backupDir = join(workspaceRoot, 'memory', 'backups');
+                
+                if (!existsSync(backupDir)) {
+                  console.log('No local backups found');
+                  return;
+                }
+                
+                const files = readdirSync(backupDir)
+                  .filter(f => f.endsWith('.json'))
+                  .sort()
+                  .reverse();
+                
+                console.log(`📋 Local Backups\n`);
+                
+                if (files.length === 0) {
+                  console.log('No backups found');
+                  return;
+                }
+                
+                files.forEach((f, i) => {
+                  const stats = require('fs').statSync(join(backupDir, f));
+                  const size = (stats.size / 1024).toFixed(1);
+                  const date = new Date(stats.mtime).toLocaleString();
+                  console.log(`${i + 1}. ${f}`);
+                  console.log(`   Size: ${size} KB | Date: ${date}`);
+                });
+              }
+            });
+          
+          // Subcommand: setup-cloud
+          memories
+            .command('setup-cloud')
+            .description('Setup cloud backup (Google Drive, Dropbox, OneDrive)')
+            .action(() => {
+              const { exec } = require('child_process');
+              
+              console.log('🔧 Cloud Backup Setup\n');
+              console.log('This will help you configure rclone for cloud backup.\n');
+              
+              // Check if rclone is installed
+              exec('rclone --version', (err: any) => {
+                if (err) {
+                  console.error('❌ rclone not found!\n');
+                  console.error('📦 Install rclone:');
+                  console.error('   Windows: choco install rclone');
+                  console.error('   macOS:   brew install rclone');
+                  console.error('   Linux:   sudo apt install rclone\n');
+                  console.error('Then run: openclaw memories setup-cloud');
+                  return;
+                }
+                
+                console.log('✓ rclone is installed\n');
+                console.log('📝 Run rclone config to setup cloud providers:\n');
+                console.log('   rclone config\n');
+                console.log('Follow the prompts:');
+                console.log('   1. n) New remote');
+                console.log('   2. Name: gdrive (or dropbox, onedrive)');
+                console.log('   3. Select provider from list');
+                console.log('   4. Follow OAuth instructions\n');
+                console.log('After setup, use:');
+                console.log('   openclaw memories backup --to gdrive');
+                console.log('   openclaw memories list-backups --from gdrive');
+                console.log('   openclaw memories restore backup.json --from gdrive\n');
+              });
             });
 
           // Subcommand: stats
@@ -1156,7 +1366,7 @@ const lobsterMindPlugin = {
         },
         { commands: ['memories'] }
       );
-      console.log('[lobstermind] Memories CLI registered with subcommands: list, add, delete, edit, search, export, import, stats, tags, backup, restore, cleanup');
+      console.log('[lobstermind] Memories CLI registered with subcommands: list, add, delete, edit, search, export, import, stats, tags, backup, restore, cleanup, list-backups, setup-cloud');
     } catch (err: any) {
       console.error('[lobstermind] CLI registration error:', err.message);
     }
