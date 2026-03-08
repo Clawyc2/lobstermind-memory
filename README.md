@@ -14,7 +14,7 @@
 **Use cases:**
 - **Personal Assistant**: "Remember I'm vegetarian" → AI remembers for restaurant suggestions
 - **Developer**: "I prefer TypeScript" → AI suggests TS for new projects
-- **Notes**: "Recordá que tengo reunión el viernes" → AI reminds you
+- **Notes**: "Remember I have a meeting on Friday" → AI reminds you
 - **Preferences**: "I like dark mode" → AI configures UI accordingly
 - **Facts**: "I live in Buenos Aires" → AI adjusts timezone/suggestions
 - **Decisions**: "I chose AWS over GCP" → AI remembers for future architecture discussions
