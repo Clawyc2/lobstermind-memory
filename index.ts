@@ -206,64 +206,75 @@ const paoloMemoryPlugin = {
   // Hook: Before prompt build - recall relevant memories
   console.log('[paolo-memory] Registering before_prompt_build hook...');
   api.on('before_prompt_build', async (event: any, ctx: any) => {
-    console.log('[paolo-memory] before_prompt_build triggered!');
-    
-    // Messages are in event, not ctx!
-    const messages = event?.messages || ctx?.messages || [];
-    console.log('[paolo-memory] Messages count:', messages.length);
-    
-    // Find the last user message with enough length (skip short commands/reactions/bootstrap)
-    let query = '';
-    const skipPhrases = ['session bootstrap', 'system:', 'assistant:', 'tool:'];
-    const minLength = 5; // Reduced from 10 to catch shorter questions
-    
-    console.log('[paolo-memory] Scanning messages for recall...');
-    
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
+    try {
+      console.log('[paolo-memory] before_prompt_build triggered!');
       
-      // Debug: show last 5 messages
-      if (i >= messages.length - 5) {
-        console.log(`[paolo-memory] Message[${i}]: role=${msg?.role}, length=${msg?.content?.length || 0}`);
-      }
+      // Messages are in event, not ctx!
+      const messages = event?.messages || ctx?.messages || [];
+      console.log('[paolo-memory] Messages count:', messages.length);
       
-      if (msg?.role === 'user' && msg?.content && msg.content.length >= minLength) {
-        // Skip bootstrap/system messages
-        const lowerContent = msg.content.toLowerCase();
-        const isSystemMessage = skipPhrases.some(phrase => lowerContent.includes(phrase));
+      // Find the last user message with enough length (skip short commands/reactions/bootstrap)
+      let query = '';
+      const skipPhrases = ['session bootstrap', 'system:', 'assistant:', 'tool:'];
+      const minLength = 5; // Reduced from 10 to catch shorter questions
+      
+      console.log('[paolo-memory] Scanning messages for recall...');
+      
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
         
-        if (!isSystemMessage) {
-          query = msg.content;
-          console.log('[paolo-memory] Found user message at index', i, 'with length', query.length);
-          console.log('[paolo-memory] Query preview:', query.substring(0, 60));
-          break;
-        } else {
-          console.log('[paolo-memory] Skipping system/bootstrap message at index', i);
+        // Debug: show last 5 messages
+        if (i >= messages.length - 5) {
+          console.log(`[paolo-memory] Message[${i}]: role=${msg?.role}, length=${msg?.content?.length || 0}`);
+        }
+        
+        if (msg?.role === 'user' && msg?.content && msg.content.length >= minLength) {
+          // Skip bootstrap/system messages
+          const lowerContent = msg.content.toLowerCase();
+          const isSystemMessage = skipPhrases.some(phrase => lowerContent.includes(phrase));
+          
+          if (!isSystemMessage) {
+            query = msg.content;
+            console.log('[paolo-memory] Found user message at index', i, 'with length', query.length);
+            console.log('[paolo-memory] Query preview:', query.substring(0, 60));
+            break;
+          } else {
+            console.log('[paolo-memory] Skipping system/bootstrap message at index', i);
+          }
         }
       }
-    }
-    
-    if (!query) {
-      console.log('[paolo-memory] Skipping recall - no suitable user message found (all messages too short or system messages)');
-      console.log('[paolo-memory] Tip: Try asking a question with at least', minLength, 'characters');
-      return;
-    }
-    
-    try {
-      const memories = await recallMemories(query);
-      console.log('[paolo-memory] Recall results:', memories.length);
       
-      if (memories.length > 0) {
-        const context = memories.map(m => `- ${m.content}`).join('\n');
-        console.log(`[paolo-memory] Recalled ${memories.length} memories`);
-        return {
-          prependSystemContext: `<paolo-memory-context>\nRelevant memories from long-term storage:\n${context}\n</paolo-memory-context>`
-        };
-      } else {
-        console.log('[paolo-memory] No memories found for this query');
+      if (!query) {
+        console.log('[paolo-memory] Skipping recall - no suitable user message found');
+        return null; // Don't block, just return null
       }
+      
+      try {
+        const memories = await recallMemories(query);
+        console.log('[paolo-memory] Recall results:', memories.length);
+        
+        if (memories.length > 0) {
+          const context = memories.map(m => `- ${m.content}`).join('\n');
+          console.log(`[paolo-memory] Recalled ${memories.length} memories`);
+          const result = {
+            prependSystemContext: `<paolo-memory-context>\nRelevant memories from long-term storage:\n${context}\n</paolo-memory-context>`
+          };
+          console.log('[paolo-memory] Returning context:', JSON.stringify(result, null, 2));
+          return result;
+        } else {
+          console.log('[paolo-memory] No memories found for this query');
+        }
+      } catch (recallErr: any) {
+        console.error('[paolo-memory] Recall error:', recallErr.message);
+        // Don't block - continue without memories
+      }
+      
+      return null; // No memories found, but don't block
     } catch (err: any) {
-      console.error('[paolo-memory] Recall error:', err.message);
+      console.error('[paolo-memory] HOOK ERROR (non-blocking):', err.message);
+      console.error('[paolo-memory] Stack:', err.stack);
+      // CRITICAL: Return null to avoid blocking the agent response
+      return null;
     }
   });
   
