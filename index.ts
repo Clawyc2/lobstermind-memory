@@ -77,13 +77,45 @@ const lobsterMindPlugin = {
   console.log('[lobstermind] Memory dir:', memoryDir);
   console.log('[lobstermind] Database:', dbPath);
   
-  // Ensure directory exists
-  try {
-    if (!existsSync(memoryDir)) {
-      mkdirSync(memoryDir, { recursive: true });
+  // Ensure directories exist (auto-setup on first load)
+  const dirsToCreate = [
+    memoryDir,
+    join(workspaceRoot, 'memory', 'backups'),
+    join(workspaceRoot, 'memory', 'cloud-sync'),
+    join(workspaceRoot, 'obsidian-vault', 'LobsterMind')
+  ];
+  
+  for (const dir of dirsToCreate) {
+    try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+        console.log('[lobstermind] Created directory:', dir);
+      }
+    } catch (err: any) {
+      console.error('[lobstermind] Error creating directory:', dir, err.message);
     }
-  } catch (err: any) {
-    console.error('[lobstermind] Error creating directory:', err.message);
+  }
+  
+  // Create native MEMORY.md if not exists
+  const memoryMdPath = join(workspaceRoot, 'MEMORY.md');
+  if (!existsSync(memoryMdPath)) {
+    try {
+      writeFileSync(memoryMdPath, '# Memories\n\nAuto-created by LobsterMind Memory plugin\n\n', 'utf-8');
+      console.log('[lobstermind] Created MEMORY.md:', memoryMdPath);
+    } catch (err: any) {
+      console.error('[lobstermind] Error creating MEMORY.md:', err.message);
+    }
+  }
+  
+  // Create Obsidian Memories.md if not exists
+  const obsidianMdPath = join(workspaceRoot, 'obsidian-vault', 'LobsterMind', 'Memories.md');
+  if (!existsSync(obsidianMdPath)) {
+    try {
+      writeFileSync(obsidianMdPath, '# Memories\n\nAuto-created by LobsterMind Memory plugin\n\n', 'utf-8');
+      console.log('[lobstermind] Created Obsidian Memories.md:', obsidianMdPath);
+    } catch (err: any) {
+      console.error('[lobstermind] Error creating Obsidian Memories.md:', err.message);
+    }
   }
   
   console.log('[lobstermind] Initializing database...');

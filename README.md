@@ -31,6 +31,7 @@ Just say "Remember..." and it's saved automatically with the right type.
 git clone https://github.com/pnll1991/lobstermind-memory.git "$env:USERPROFILE\.openclaw\extensions\lobstermind-memory"
 cd "$env:USERPROFILE\.openclaw\extensions\lobstermind-memory"
 npm install
+# ✅ Auto-creates: database, backups, Obsidian vault, MEMORY.md
 openclaw gateway restart
 ```
 
@@ -39,8 +40,11 @@ openclaw gateway restart
 git clone https://github.com/pnll1991/lobstermind-memory.git ~/.openclaw/extensions/lobstermind-memory
 cd ~/.openclaw/extensions/lobstermind-memory
 npm install
+# ✅ Auto-creates: database, backups, Obsidian vault, MEMORY.md
 openclaw gateway restart
 ```
+
+**That's it. Everything is automatic.**
 
 ---
 
