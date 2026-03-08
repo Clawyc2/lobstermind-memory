@@ -72,21 +72,21 @@ cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
 if command -v jq &> /dev/null; then
     # Check if plugins.entries exists
     if jq -e '.plugins.entries' "$CONFIG_FILE" > /dev/null 2>&1; then
-        # Add paolo-memory-v2 entry
-        jq '.plugins.entries["paolo-memory-v2"] = {"enabled": true, "config": {"enabled": true}}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        # Add lobstermind-memory entry
+        jq '.plugins.entries["lobstermind-memory"] = {"enabled": true, "config": {"enabled": true}}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
         mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     else
         # Create plugins.entries
-        jq '.plugins.entries = {"paolo-memory-v2": {"enabled": true, "config": {"enabled": true}}}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        jq '.plugins.entries = {"lobstermind-memory": {"enabled": true, "config": {"enabled": true}}}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
         mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     fi
     
     # Check if plugins.slots exists
     if jq -e '.plugins.slots' "$CONFIG_FILE" > /dev/null 2>&1; then
-        jq '.plugins.slots.memory = "paolo-memory-v2"' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        jq '.plugins.slots.memory = "lobstermind-memory"' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
         mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     else
-        jq '.plugins.slots = {"memory": "paolo-memory-v2"}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        jq '.plugins.slots = {"memory": "lobstermind-memory"}' "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
         mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     fi
 else
@@ -94,10 +94,10 @@ else
     echo ""
     echo '  "plugins": {'
     echo '    "slots": {'
-    echo '      "memory": "paolo-memory-v2"'
+    echo '      "memory": "lobstermind-memory"'
     echo '    },'
     echo '    "entries": {'
-    echo '      "paolo-memory-v2": {'
+    echo '      "lobstermind-memory": {'
     echo '        "enabled": true,'
     echo '        "config": {'
     echo '          "enabled": true'

@@ -1,7 +1,7 @@
 {
-  "id": "paolo-memory-v2",
+  "id": "lobstermind-memory",
   "kind": "memory",
-  "name": "Paolo Memory",
+  "name": "LobsterMind Memory",
   "description": "Minimal memory plugin for OpenClaw",
   "version": "0.1.0",
   "configSchema": {

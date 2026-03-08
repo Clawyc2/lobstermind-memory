@@ -31,7 +31,7 @@
     "node": ">=22.0.0"
   },
   "openclaw": {
-    "pluginId": "paolo-memory-v2",
+    "pluginId": "lobstermind-memory",
     "minOpenClawVersion": "2026.3.7",
     "displayName": "LobsterMind Memory",
     "category": "memory"

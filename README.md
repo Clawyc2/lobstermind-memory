@@ -482,7 +482,7 @@ lobstermind-memory/
     └── workflows/                # CI/CD workflows (optional)
 
 Runtime files (created automatically):
-├── ~/.openclaw/workspace/memory/paolo-memory.db       # SQLite database
+├── ~/.openclaw/workspace/memory/lobstermind-memory.db       # SQLite database
 └── ~/.openclaw/workspace/obsidian-vault/Gigabrain/
     └── Memories.md                                    # Obsidian export
 ```
@@ -557,10 +557,10 @@ If you see "unknown command", the plugin didn't load. Check the logs above.
 **Reset the database:**
 ```bash
 # Windows
-del "%USERPROFILE%\.openclaw\workspace\memory\paolo-memory.db"
+del "%USERPROFILE%\.openclaw\workspace\memory\lobstermind-memory.db"
 
 # macOS/Linux
-rm ~/.openclaw/workspace/memory/paolo-memory.db
+rm ~/.openclaw/workspace/memory/lobstermind-memory.db
 
 # Restart OpenClaw
 openclaw doctor

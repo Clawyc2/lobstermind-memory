@@ -1,24 +1,21 @@
 /**
- * Paolo Memory - Step 1: SQLite + DashScope Embeddings
+ * LobsterMind Memory - Long-term memory plugin for OpenClaw
+ * Step 1: SQLite + Local Hash-based Embeddings
+ * 
+ * Features:
+ * - SQLite storage for persistent memory
+ * - Local hash-based embeddings (no API required)
+ * - Automatic Obsidian sync
+ * - Semantic search and recall
+ * - CLI commands for memory management
+ * 
+ * Author: Paolozky
+ * License: MIT
  */
 
-import Database from 'better-sqlite3';
-import { createHash } from 'crypto';
-import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
-
-interface MemoryRecord {
-  id: string;
-  content: string;
-  type: string;
-  confidence: number;
-  embedding: string;
-  created_at: string;
-}
-
-const paoloMemoryPlugin = {
-  id: 'paolo-memory-v2',
-  name: 'Paolo Memory',
+const lobsterMindPlugin = {
+  id: 'lobstermind-memory',
+  name: 'LobsterMind Memory',
   description: 'SQLite + DashScope embeddings long-term memory',
   kind: 'memory',
   configSchema: {
@@ -33,20 +30,20 @@ const paoloMemoryPlugin = {
   },
   register(api: any) {
   try {
-  console.log('[paolo-memory] Plugin loading...');
-  console.log('[paolo-memory] API type:', typeof api);
-  console.log('[paolo-memory] API keys:', Object.keys(api || {}).join(', '));
+  console.log('[lobstermind] Plugin loading...');
+  console.log('[lobstermind] API type:', typeof api);
+  console.log('[lobstermind] API keys:', Object.keys(api || {}).join(', '));
   
   const config = api?.config || {};
-  console.log('[paolo-memory] Config:', JSON.stringify(config, null, 2));
+  console.log('[lobstermind] Config:', JSON.stringify(config, null, 2));
   
-  const workspaceRoot = config.workspaceRoot || process.env.OPENCLAW_WORKSPACE || 'C:\\Users\\Paolozky\\.openclaw\\workspace';
+  const workspaceRoot = config.workspaceRoot || process.env.OPENCLAW_WORKSPACE || '<YOUR_OPENCLAW_WORKSPACE>';
   const memoryDir = join(workspaceRoot, 'memory');
-  const dbPath = join(memoryDir, 'paolo-memory.db');
+  const dbPath = join(memoryDir, 'lobstermind-memory.db');
   
-  console.log('[paolo-memory] Workspace:', workspaceRoot);
-  console.log('[paolo-memory] Memory dir:', memoryDir);
-  console.log('[paolo-memory] Database:', dbPath);
+  console.log('[lobstermind] Workspace:', workspaceRoot);
+  console.log('[lobstermind] Memory dir:', memoryDir);
+  console.log('[lobstermind] Database:', dbPath);
   
   // Ensure directory exists
   try {
@@ -54,18 +51,18 @@ const paoloMemoryPlugin = {
       mkdirSync(memoryDir, { recursive: true });
     }
   } catch (err: any) {
-    console.error('[paolo-memory] Error creating directory:', err.message);
+    console.error('[lobstermind] Error creating directory:', err.message);
   }
   
-  console.log('[paolo-memory] Initializing database...');
+  console.log('[lobstermind] Initializing database...');
   
   // Initialize database
   let db: any;
   try {
     db = new Database(dbPath);
   } catch (err: any) {
-    console.error('[paolo-memory] Database init error:', err.message);
-    console.error('[paolo-memory] dbPath:', dbPath, 'type:', typeof dbPath);
+    console.error('[lobstermind] Database init error:', err.message);
+    console.error('[lobstermind] dbPath:', dbPath, 'type:', typeof dbPath);
     throw err;
   }
   
@@ -82,7 +79,7 @@ const paoloMemoryPlugin = {
     CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
     CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
   `);
-  console.log('[paolo-memory] Database initialized');
+  console.log('[lobstermind] Database initialized');
   
   // Local embeddings using simple hash-based method (no API required!)
   // This enables semantic-like search without external dependencies
@@ -114,7 +111,7 @@ const paoloMemoryPlugin = {
       const vector = hashToVector(text);
       return vector;
     } catch (err: any) {
-      console.error('[paolo-memory] Embedding error:', err.message);
+      console.error('[lobstermind] Embedding error:', err.message);
       // Fallback to zero vector (still allows storage, just no semantic search)
       return new Array(384).fill(0);
     }
@@ -136,7 +133,7 @@ const paoloMemoryPlugin = {
     if (existing) {
       db.prepare('UPDATE memories SET content = ?, type = ?, confidence = ?, updated_at = ? WHERE id = ?')
         .run(content, type, confidence, now, id);
-      console.log('[paolo-memory] Updated memory:', content.substring(0, 50));
+      console.log('[lobstermind] Updated memory:', content.substring(0, 50));
       return id;
     }
     
@@ -152,7 +149,7 @@ const paoloMemoryPlugin = {
       syncToObsidian(content, type, confidence, now);
     }
     
-    console.log('[paolo-memory] Captured memory:', content.substring(0, 50));
+    console.log('[lobstermind] Captured memory:', content.substring(0, 50));
     return id;
   }
   
@@ -171,8 +168,8 @@ const paoloMemoryPlugin = {
     return scored;
   }
   
-  // Obsidian sync
-  const obsidianDir = join(workspaceRoot, 'obsidian-vault', 'Gigabrain');
+  // Obsidian sync - export memories to LobsterMind vault
+  const obsidianDir = join(workspaceRoot, 'obsidian-vault', 'LobsterMind');
   
   function syncToObsidian(content: string, type: string, confidence: number, createdAt: string) {
     try {
@@ -197,50 +194,51 @@ const paoloMemoryPlugin = {
         }
       }
       
-      console.log('[paolo-memory] Synced to Obsidian:', mdPath);
+      console.log('[lobstermind] Synced to Obsidian:', mdPath);
     } catch (err: any) {
-      console.error('[paolo-memory] Obsidian sync error:', err.message);
+      console.error('[lobstermind] Obsidian sync error:', err.message);
     }
   }
   
   // Hook: Before prompt build - recall relevant memories
-  console.log('[paolo-memory] Registering before_prompt_build hook...');
+  console.log('[lobstermind] Registering before_prompt_build hook...');
   api.on('before_prompt_build', async (event: any, ctx: any) => {
     try {
-      console.log('[paolo-memory] before_prompt_build triggered!');
-      console.log('[paolo-memory] Event keys:', Object.keys(event || {}).join(', '));
+      console.log('[lobstermind] before_prompt_build triggered!');
+      console.log('[lobstermind] Event keys:', Object.keys(event || {}).join(', '));
       
       // Messages are in event, not ctx!
       const messages = event?.messages || ctx?.messages || [];
-      console.log('[paolo-memory] Messages count:', messages.length);
+      console.log('[lobstermind] Messages count:', messages.length);
       
       // Also check event.prompt
       const prompt = event?.prompt;
-      console.log('[paolo-memory] Event.prompt:', prompt ? prompt.substring(0, 100) : 'not available');
+      console.log('[lobstermind] Event.prompt:', prompt ? prompt.substring(0, 100) : 'not available');
       
-      // Find the last message with enough length (any role, since user messages might not be in array yet)
+      // Find the last USER message with enough length
       let query = '';
       const skipPhrases = ['session bootstrap', 'system:', 'tool:'];
       const minLength = 5;
       
-      console.log('[paolo-memory] Scanning all messages for query...');
+      console.log('[lobstermind] Scanning for USER messages...');
       
-      // Search backwards through ALL messages (any role)
-      let messagesScanned = 0;
-      for (let i = messages.length - 1; i >= 0 && messagesScanned < 10; i--) {
+      // Search backwards through ONLY user messages
+      for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        messagesScanned++;
+        
+        // Only process user messages!
+        if (msg?.role !== 'user') {
+          continue;
+        }
         
         const content = msg?.content || msg?.text || '';
         if (!content) continue;
         
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         
-        // Log first 5 messages we scan
-        if (messagesScanned <= 5) {
-          console.log(`[paolo-memory] Message[${i}]: role=${msg?.role || 'unknown'}, type=${typeof content}, length=${contentStr.length}`);
-          console.log(`[paolo-memory] Preview: ${contentStr.substring(0, 60)}`);
-        }
+        // Log all user messages we find
+        console.log(`[lobstermind] User message[${i}]: type=${typeof content}, length=${contentStr.length}`);
+        console.log(`[lobstermind] Preview: ${contentStr.substring(0, 60)}`);
         
         if (contentStr.length >= minLength) {
           const lowerContent = contentStr.toLowerCase();
@@ -248,52 +246,45 @@ const paoloMemoryPlugin = {
           
           if (!isSystemMessage) {
             query = contentStr;
-            console.log('[paolo-memory] ✓ FOUND suitable message at index', i, 'with length', query.length);
-            console.log('[paolo-memory] Query:', query.substring(0, 80));
+            console.log('[lobstermind] ✓ FOUND suitable user message at index', i, 'with length', query.length);
+            console.log('[lobstermind] Query:', query.substring(0, 80));
             break;
           } else {
-            console.log('[paolo-memory] ✗ Skipping system/bootstrap at index', i);
+            console.log('[lobstermind] ✗ Skipping system/bootstrap at index', i);
           }
+        } else {
+          console.log('[lobstermind] ✗ Message too short at index', i);
         }
       }
       
-      console.log('[paolo-memory] Total messages scanned:', messagesScanned);
-      
       if (!query) {
-        console.log('[paolo-memory] ⚠ No suitable user message found - using prompt instead');
-        // Fallback: use event.prompt if available
-        if (prompt && prompt.length >= minLength) {
-          query = prompt;
-          console.log('[paolo-memory] Using prompt as query, length:', query.length);
-        } else {
-          console.log('[paolo-memory] Skipping recall - no query available');
-          return null;
-        }
+        console.log('[lobstermind] ⚠ No suitable user message found');
+        return null;
       }
       
       try {
         const memories = await recallMemories(query);
-        console.log('[paolo-memory] Recall results:', memories.length);
+        console.log('[lobstermind] Recall results:', memories.length);
         
         if (memories.length > 0) {
           const context = memories.map(m => `- ${m.content}`).join('\n');
-          console.log(`[paolo-memory] ✓ Recalled ${memories.length} memories`);
+          console.log(`[lobstermind] ✓ Recalled ${memories.length} memories`);
           const result = {
-            prependSystemContext: `<paolo-memory-context>\nRelevant memories from long-term storage:\n${context}\n</paolo-memory-context>`
+            prependSystemContext: `<lobstermind-memory-context>\nRelevant memories from long-term storage:\n${context}\n</lobstermind-memory-context>`
           };
-          console.log('[paolo-memory] Returning context');
+          console.log('[lobstermind] Returning context');
           return result;
         } else {
-          console.log('[paolo-memory] No memories found for this query');
+          console.log('[lobstermind] No memories found for this query');
         }
       } catch (recallErr: any) {
-        console.error('[paolo-memory] Recall error:', recallErr.message);
+        console.error('[lobstermind] Recall error:', recallErr.message);
       }
       
       return null;
     } catch (err: any) {
-      console.error('[paolo-memory] HOOK ERROR (non-blocking):', err.message);
-      console.error('[paolo-memory] Stack:', err.stack);
+      console.error('[lobstermind] HOOK ERROR (non-blocking):', err.message);
+      console.error('[lobstermind] Stack:', err.stack);
       return null;
     }
   });
@@ -317,7 +308,7 @@ const paoloMemoryPlugin = {
               try {
                 await captureMemory(content, type, confidence);
               } catch (err: any) {
-                console.error('[paolo-memory] Capture error:', err.message);
+                console.error('[lobstermind] Capture error:', err.message);
               }
             }
           }
@@ -328,13 +319,13 @@ const paoloMemoryPlugin = {
   
   // Register CLI command for manual memory management
   if (api.registerCli) {
-    console.log('[paolo-memory] Registering memories CLI...');
+    console.log('[lobstermind] Registering memories CLI...');
     try {
       api.registerCli(
         ({ program }: any) => {
           program
             .command('memories')
-            .description('Manage long-term memories (Paolo Memory)')
+            .description('Manage long-term memories (LobsterMind Memory)')
             .option('--list', 'List recent memories')
             .option('--add <content>', 'Add a memory manually')
             .option('--search <query>', 'Search memories by query')
@@ -365,25 +356,25 @@ const paoloMemoryPlugin = {
         },
         { commands: ['memories'] }
       );
-      console.log('[paolo-memory] Memories CLI registered with options: --list, --add, --search');
+      console.log('[lobstermind] Memories CLI registered with options: --list, --add, --search');
     } catch (err: any) {
-      console.error('[paolo-memory] CLI registration error:', err.message);
+      console.error('[lobstermind] CLI registration error:', err.message);
     }
   }
   
-  console.log('[paolo-memory] Hooks and commands registered');
-  console.log('[paolo-memory] Ready!');
+  console.log('[lobstermind] Hooks and commands registered');
+  console.log('[lobstermind] Ready!');
   
   return {
-    name: 'paolo-memory',
+    name: 'lobstermind-memory',
     version: '0.1.0'
   };
   } catch (err: any) {
-    console.error('[paolo-memory] FATAL ERROR:', err.message);
-    console.error('[paolo-memory] Stack:', err.stack);
+    console.error('[lobstermind] FATAL ERROR:', err.message);
+    console.error('[lobstermind] Stack:', err.stack);
     throw err;
   }
   }
 };
 
-export default paoloMemoryPlugin;
+export default lobsterMindPlugin;

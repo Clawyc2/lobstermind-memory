@@ -86,13 +86,13 @@ try {
     }
     
     # Add plugin entry
-    $config.plugins.entries | Add-Member -NotePropertyName "paolo-memory-v2" -NotePropertyValue (@{
+    $config.plugins.entries | Add-Member -NotePropertyName "lobstermind-memory" -NotePropertyValue (@{
         "enabled" = $true
         "config" = @{"enabled" = $true}
     }) -Force
     
     # Set memory slot
-    $config.plugins.slots.memory = "paolo-memory-v2"
+    $config.plugins.slots.memory = "lobstermind-memory"
     
     # Save config
     $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigFile -Encoding UTF8
@@ -105,10 +105,10 @@ try {
 
   "plugins": {
     "slots": {
-      "memory": "paolo-memory-v2"
+      "memory": "lobstermind-memory"
     },
     "entries": {
-      "paolo-memory-v2": {
+      "lobstermind-memory": {
         "enabled": true,
         "config": {
           "enabled": true
