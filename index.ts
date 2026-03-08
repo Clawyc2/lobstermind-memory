@@ -629,19 +629,33 @@ const lobsterMindPlugin = {
           // Subcommand: search
           memories
             .command('search <query>')
-            .description('Search memories by query (supports fuzzy search)')
+            .description('Search memories by query (supports natural language)')
             .option('--limit <n>', 'Maximum results', '10')
             .option('--min-score <n>', 'Minimum similarity score', '0.3')
             .option('--fuzzy', 'Enable fuzzy matching for typos')
+            .option('--nl', 'Enable natural language parsing (auto-detects dates, tags)')
             .action(async (query: string, options: any) => {
               const limit = parseInt(options.limit) || 10;
               const minScore = parseFloat(options.minScore) || 0.3;
               
-              let results: any[] = [];
+              // Parse natural language query if --nl flag or auto-detect
+              const nlParsed = options.nl || containsNaturalLanguage(query);
               
-              if (options.fuzzy) {
+              if (nlParsed) {
+                const parsed = parseNaturalLanguageQuery(query);
+                console.log(`[lobstermind] NL Query detected:`);
+                console.log(`  Search: "${parsed.searchQuery}"`);
+                if (parsed.dateFrom) console.log(`  From: ${parsed.dateFrom}`);
+                if (parsed.dateTo) console.log(`  To: ${parsed.dateTo}`);
+                if (parsed.tags) console.log(`  Tags: ${parsed.tags}`);
+                if (parsed.type) console.log(`  Type: ${parsed.type}`);
+                
+                // Execute search with parsed filters
+                await executeFilteredSearch(parsed, limit, minScore, options.fuzzy);
+              } else if (options.fuzzy) {
                 // Fuzzy search: search for variations and substrings
                 const variations = generateQueryVariations(query);
+                let results: any[] = [];
                 for (const variation of variations) {
                   const memories = await recallMemories(variation, limit, minScore * 0.9);
                   results = results.concat(memories);
@@ -655,44 +669,214 @@ const lobsterMindPlugin = {
                 });
                 // Re-sort by score
                 results.sort((a, b) => b.score - a.score);
+                
+                if (results.length === 0) {
+                  console.log('No memories found');
+                  return;
+                }
+                console.log(`Found ${results.length} memories:\n`);
+                results.forEach((m, i) => {
+                  console.log(`${i + 1}. [${m.type}] ${m.content}`);
+                  console.log(`   Score: ${m.score.toFixed(2)} | ID: ${m.id}`);
+                });
               } else {
-                results = await recallMemories(query, limit, minScore);
+                const results = await recallMemories(query, limit, minScore);
+                if (results.length === 0) {
+                  console.log('No memories found');
+                  return;
+                }
+                console.log(`Found ${results.length} memories:\n`);
+                results.forEach((m, i) => {
+                  console.log(`${i + 1}. [${m.type}] ${m.content}`);
+                  console.log(`   Score: ${m.score.toFixed(2)} | ID: ${m.id}`);
+                });
               }
-              
-              if (results.length === 0) {
-                console.log('No memories found');
-                return;
-              }
-              console.log(`Found ${results.length} memories:\n`);
-              results.forEach((m, i) => {
-                console.log(`${i + 1}. [${m.type}] ${m.content}`);
-                console.log(`   Score: ${m.score.toFixed(2)} | ID: ${m.id}`);
-              });
             });
           
-          // Generate query variations for fuzzy search
-          function generateQueryVariations(query: string): string[] {
-            const variations = [query];
+          // Execute search with parsed natural language filters
+          async function executeFilteredSearch(parsed: any, limit: number, minScore: number, fuzzy: boolean) {
+            let query = 'SELECT * FROM memories WHERE 1=1';
+            let params: any[] = [];
             
-            // Lowercase
-            variations.push(query.toLowerCase());
-            
-            // Remove common suffixes
-            if (query.endsWith('s')) variations.push(query.slice(0, -1));
-            if (query.endsWith('ing')) variations.push(query.slice(0, -3));
-            if (query.endsWith('ed')) variations.push(query.slice(0, -2));
-            
-            // Common typos/swaps
-            if (query.includes('type')) variations.push(query.replace('type', 'tip'));
-            if (query.includes('script')) variations.push(query.replace('script', 'skript'));
-            
-            // Substrings (for partial matches)
-            const words = query.split(' ');
-            if (words.length > 1) {
-              words.forEach(word => variations.push(word));
+            // Date filters
+            if (parsed.dateFrom) {
+              query += ' AND created_at >= ?';
+              params.push(parsed.dateFrom);
+            }
+            if (parsed.dateTo) {
+              query += ' AND created_at <= ?';
+              params.push(parsed.dateTo);
             }
             
-            return [...new Set(variations)]; // Remove duplicates
+            // Tag filter
+            if (parsed.tags) {
+              query += ' AND tags LIKE ?';
+              params.push(`%${parsed.tags}%`);
+            }
+            
+            // Type filter
+            if (parsed.type) {
+              query += ' AND type = ?';
+              params.push(parsed.type);
+            }
+            
+            query += ' ORDER BY created_at DESC LIMIT ?';
+            params.push(limit * 2); // Get more for filtering
+            
+            const memories = db.prepare(query).all(...params) as MemoryRecord[];
+            
+            // Filter by search query if exists
+            let results = memories;
+            if (parsed.searchQuery) {
+              if (fuzzy) {
+                const variations = generateQueryVariations(parsed.searchQuery);
+                results = memories.filter(m => {
+                  const lowerContent = m.content.toLowerCase();
+                  return variations.some(v => lowerContent.includes(v.toLowerCase()));
+                });
+              } else {
+                results = memories.filter(m => 
+                  m.content.toLowerCase().includes(parsed.searchQuery.toLowerCase())
+                );
+              }
+            }
+            
+            results = results.slice(0, limit);
+            
+            if (results.length === 0) {
+              console.log('No memories found');
+              return;
+            }
+            console.log(`Found ${results.length} memories:\n`);
+            results.forEach((m, i) => {
+              console.log(`${i + 1}. [${m.type}] ${m.content}`);
+              const date = new Date(m.created_at).toLocaleDateString();
+              const tagsStr = m.tags ? ` | Tags: [${m.tags}]` : '';
+              console.log(`   Created: ${date}${tagsStr} | ID: ${m.id}`);
+            });
+          }
+          
+          // Detect if query contains natural language patterns
+          function containsNaturalLanguage(query: string): boolean {
+            const nlPatterns = [
+              /\b(ayer|today|yesterday|hoy)\b/i,
+              /\b(semana|week)\b/i,
+              /\b(mes|month)\b/i,
+              /\b(año|year)\b/i,
+              /\b(último|last|pasado|past)\b/i,
+              /\b(próximo|next|siguiente)\b/i,
+              /\b(desde|from|since)\b/i,
+              /\b(hasta|until|to)\b/i,
+              /\b(donde|where|qué|what|cuándo|when|cómo|how)\b/i,
+              /\b(mi|my|el|la|los|las|the)\b/i,
+            ];
+            
+            return nlPatterns.some(pattern => pattern.test(query));
+          }
+          
+          // Parse natural language query into structured filters
+          function parseNaturalLanguageQuery(query: string) {
+            const result: any = {
+              searchQuery: query,
+              dateFrom: null,
+              dateTo: null,
+              tags: null,
+              type: null
+            };
+            
+            let processedQuery = query;
+            
+            // Date patterns
+            const today = new Date();
+            
+            // "ayer" / "yesterday"
+            if (/\b(ayer|yesterday)\b/i.test(processedQuery)) {
+              const yesterday = new Date(today);
+              yesterday.setDate(yesterday.getDate() - 1);
+              result.dateFrom = yesterday.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              result.dateTo = yesterday.toISOString().split('T')[0] + 'T23:59:59.999Z';
+              processedQuery = processedQuery.replace(/\b(ayer|yesterday)\b/gi, '');
+            }
+            
+            // "hoy" / "today"
+            if (/\b(hoy|today)\b/i.test(processedQuery)) {
+              result.dateFrom = today.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              result.dateTo = today.toISOString().split('T')[0] + 'T23:59:59.999Z';
+              processedQuery = processedQuery.replace(/\b(hoy|today)\b/gi, '');
+            }
+            
+            // "esta semana" / "this week"
+            if (/\b(esta\s*semana|this\s*week)\b/i.test(processedQuery)) {
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - today.getDay());
+              result.dateFrom = startOfWeek.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              processedQuery = processedQuery.replace(/\b(esta\s*semana|this\s*week)\b/gi, '');
+            }
+            
+            // "la semana pasada" / "last week"
+            if (/\b(la\s*semana\s*(pasada|antepasada)|last\s*week)\b/i.test(processedQuery)) {
+              const lastWeek = new Date(today);
+              lastWeek.setDate(today.getDate() - 7);
+              result.dateFrom = lastWeek.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              processedQuery = processedQuery.replace(/\b(la\s*semana\s*(pasada|antepasada)|last\s*week)\b/gi, '');
+            }
+            
+            // "este mes" / "this month"
+            if (/\b(este\s*mes|this\s*month)\b/i.test(processedQuery)) {
+              result.dateFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0] + 'T00:00:00.000Z';
+              processedQuery = processedQuery.replace(/\b(este\s*mes|this\s*month)\b/gi, '');
+            }
+            
+            // "el mes pasado" / "last month"
+            if (/\b(el\s*mes\s*(pasado|antepasado)|last\s*month)\b/i.test(processedQuery)) {
+              const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              result.dateFrom = lastMonth.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              processedQuery = processedQuery.replace(/\b(el\s*mes\s*(pasado|antepasado)|last\s*month)\b/gi, '');
+            }
+            
+            // "últimos N días" / "last N days"
+            const lastDaysMatch = processedQuery.match(/\b(últimos?|last)\s*(\d+)\s*(días?|days)\b/i);
+            if (lastDaysMatch) {
+              const days = parseInt(lastDaysMatch[2]);
+              const fromDate = new Date(today);
+              fromDate.setDate(fromDate.getDate() - days);
+              result.dateFrom = fromDate.toISOString().split('T')[0] + 'T00:00:00.000Z';
+              processedQuery = processedQuery.replace(lastDaysMatch[0], '');
+            }
+            
+            // Type patterns: "preferencias", "facts", "decisiones"
+            const typePatterns: {[key: string]: string} = {
+              'preferencias': 'PREFERENCE',
+              'preferences': 'PREFERENCE',
+              'hechos': 'USER_FACT',
+              'facts': 'USER_FACT',
+              'decisiones': 'DECISION',
+              'decisions': 'DECISION',
+              'proyectos': 'PROJECT',
+              'projects': 'PROJECT'
+            };
+            
+            for (const [pattern, type] of Object.entries(typePatterns)) {
+              if (new RegExp(`\\b${pattern}\\b`, 'i').test(processedQuery)) {
+                result.type = type;
+                processedQuery = processedQuery.replace(new RegExp(`\\b${pattern}\\b`, 'gi'), '');
+                break;
+              }
+            }
+            
+            // Tag patterns: "tag:xyz" or "#xyz"
+            const tagMatch = processedQuery.match(/(?:tag:|#)(\w+)/i);
+            if (tagMatch) {
+              result.tags = tagMatch[1];
+              processedQuery = processedQuery.replace(tagMatch[0], '');
+            }
+            
+            // Clean up search query
+            result.searchQuery = processedQuery
+              .replace(/\b(dime|decime|tell|show|what|qué|cuál|donde|dónde|mi|my|el|la|los|las|the|about|sobre)\b/gi, '')
+              .trim();
+            
+            return result;
           }
 
           // Subcommand: export
