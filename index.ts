@@ -530,6 +530,126 @@ const lobsterMindPlugin = {
     }
   });
   
+  // Hook: Capture memories from user messages with natural language
+  // Detects patterns like "recordá que...", "guarda que...", "anotá que..."
+  api.on('before_prompt_build', async (event: any, ctx: any) => {
+    const messages = event?.messages || ctx?.messages || [];
+    const lastMessage = messages[messages.length - 1];
+    
+    if (lastMessage?.role !== 'user' || !lastMessage.content) {
+      return null;
+    }
+    
+    const content = typeof lastMessage.content === 'string' 
+      ? lastMessage.content 
+      : lastMessage.content.map((p: any) => p.text || '').join(' ');
+    
+    // Detect memory capture patterns in Spanish
+    const memoryPatterns = [
+      { pattern: /\b(record[aá]|guard[aá]|anot[aá]|memoriz[aá])\s+(que|esto)\s+(.*)/i, type: 'AUTO_DETECT' },
+      { pattern: /\bquiero\s+(que\s+)?record(és|es)\s+(que\s+)?(.*)/i, type: 'AUTO_DETECT' },
+      { pattern: /\bes\s+importante\s+(que\s+)?(.*)/i, type: 'PREFERENCE' },
+      { pattern: /\bprefer(o|ís|es)\s+(.*)/i, type: 'PREFERENCE' },
+      { pattern: /\bme\s+gusta\s+(.*)/i, type: 'PREFERENCE' },
+      { pattern: /\btrabaj(o|ás|o)\s+(en|con)\s+(.*)/i, type: 'USER_FACT' },
+      { pattern: /\bsoy\s+(de|del|la)\s+(.*)/i, type: 'USER_FACT' },
+      { pattern: /\btengo\s+(un|una|unos|unas)\s+(.*)/i, type: 'USER_FACT' },
+      { pattern: /\bvivo\s+(en|cerca|lejos)\s+(.*)/i, type: 'USER_FACT' },
+      { pattern: /\bdecid(o|ís|e)\s+(.*)/i, type: 'DECISION' },
+      { pattern: /\bmi\s+(proyecto|app|sistema|startup)\s+(es|se llama|trata de)\s+(.*)/i, type: 'PROJECT' },
+    ];
+    
+    for (const { pattern, type } of memoryPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        // Extract the actual content to remember
+        let memoryContent = content;
+        if (match[3]) {
+          memoryContent = match[3].trim();
+        } else if (match[2]) {
+          memoryContent = match[2].trim();
+        } else if (match[1]) {
+          memoryContent = match[0].trim();
+        }
+        
+        // Auto-detect type based on content keywords if type is AUTO_DETECT
+        let detectedType = type;
+        if (type === 'AUTO_DETECT') {
+          detectedType = detectMemoryType(memoryContent);
+        }
+        
+        // Only capture if content is long enough
+        if (memoryContent.length >= 15) {
+          console.log(`[lobstermind] Auto-capture from user message: "${memoryContent.substring(0, 50)}..."`);
+          console.log(`[lobstermind] Detected type: ${detectedType}`);
+          
+          try {
+            await captureMemory(memoryContent, detectedType, 0.8, false);
+          } catch (err: any) {
+            console.error('[lobstermind] Auto-capture error:', err.message);
+          }
+        }
+        
+        break; // Only match one pattern
+      }
+    }
+    
+    return null;
+  });
+  
+  // Auto-detect memory type based on content keywords
+  function detectMemoryType(content: string): string {
+    const lower = content.toLowerCase();
+    
+    // Preference indicators
+    if (/\bprefer(o|ís|e)\b/.test(lower) || 
+        /\bme\s+gusta\b/.test(lower) || 
+        /\bmi\s+favorit(o|a)\b/.test(lower) ||
+        /\bodio\b/.test(lower) ||
+        /\bdetesto\b/.test(lower)) {
+      return 'PREFERENCE';
+    }
+    
+    // User fact indicators
+    if (/\bsoy\b/.test(lower) ||
+        /\btengo\b/.test(lower) ||
+        /\btrabaj(o|ás|o)\b/.test(lower) ||
+        /\bstudio\b/.test(lower) ||
+        /\bvivo\b/.test(lower) ||
+        /\btengo\s+\d+\s+a[ñn]os\b/.test(lower) ||
+        /\bmi\s+(nombre|nombre\s+es)\b/.test(lower)) {
+      return 'USER_FACT';
+    }
+    
+    // Decision indicators
+    if (/\bdecid(o|ís|e)\b/.test(lower) ||
+        /\beleg(o|ís|e)\b/.test(lower) ||
+        /\bopt(e|é|o)\b/.test(lower) ||
+        /\bme\s+quedo\s+con\b/.test(lower)) {
+      return 'DECISION';
+    }
+    
+    // Project indicators
+    if (/\bmi\s+proyecto\b/.test(lower) ||
+        /\bmi\s+app\b/.test(lower) ||
+        /\bmi\s+startup\b/.test(lower) ||
+        /\bmi\s+empresa\b/.test(lower) ||
+        /\bestoy\s+(creando|desarrollando|haciendo)\b/.test(lower)) {
+      return 'PROJECT';
+    }
+    
+    // Episode indicators
+    if (/\bhoy\b/.test(lower) ||
+        /\bayer\b/.test(lower) ||
+        /\bla\s+semana\s+(pasada|que\s+viene)\b/.test(lower) ||
+        /\b(el|este)\s+(año|mes)\b/.test(lower)) {
+      return 'EPISODE';
+    }
+    
+    // Default to USER_FACT
+    return 'USER_FACT';
+  }
+  
   // Register CLI command for manual memory management
   if (api.registerCli) {
     console.log('[lobstermind] Registering memories CLI...');
