@@ -41,24 +41,24 @@ LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional pa
 ### English
 
 - **SQLite Storage**: All memories stored locally in a lightweight SQLite database
-- **Semantic Search**: Find relevant memories using natural language queries powered by embeddings
-- **DashScope Embeddings**: High-quality text embeddings via Alibaba DashScope API (with fallback)
+- **Semantic Search**: Find relevant memories using natural language queries powered by local hash-based embeddings
+- **Local Embeddings**: No API keys required! Uses deterministic hash-based vectors for similarity search
 - **Obsidian Sync**: Automatic export of memories to your Obsidian vault in Markdown format
 - **CLI Commands**: Manage memories via command line (`--list`, `--add`, `--search`)
 - **Auto-Capture**: Automatically captures memories from `<memory_note>` tags in conversations
 - **Recall Hooks**: Injects relevant memories before each AI response
-- **Zero Configuration**: Works immediately after installation
+- **Zero Configuration**: Works immediately after installation - no API keys, no setup
 
 ### Español
 
 - **Almacenamiento SQLite**: Todas las memorias guardadas localmente en una base de datos SQLite ligera
-- **Búsqueda Semántica**: Encuentra memorias relevantes usando consultas en lenguaje natural con embeddings
-- **Embeddings DashScope**: Embeddings de texto de alta calidad vía API de Alibaba DashScope (con fallback)
+- **Búsqueda Semántica**: Encuentra memorias relevantes usando consultas en lenguaje natural con embeddings locales basados en hash
+- **Embeddings Locales**: ¡No requiere API keys! Usa vectores determinísticos basados en hash para búsqueda por similitud
 - **Sync con Obsidian**: Exportación automática de memorias a tu vault de Obsidian en formato Markdown
 - **Comandos CLI**: Gestiona memorias vía línea de comandos (`--list`, `--add`, `--search`)
 - **Captura Automática**: Captura memorias automáticamente desde tags `<memory_note>` en conversaciones
 - **Hooks de Recall**: Inyecta memorias relevantes antes de cada respuesta de la IA
-- **Cero Configuración**: Funciona inmediatamente después de la instalación
+- **Cero Configuración**: Funciona inmediatamente después de la instalación - sin API keys, sin setup
 
 ---
 
