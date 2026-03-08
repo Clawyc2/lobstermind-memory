@@ -1,0 +1,17 @@
+{
+  "id": "paolo-memory-v2",
+  "kind": "memory",
+  "name": "Paolo Memory",
+  "description": "Minimal memory plugin for OpenClaw",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  }
+}
