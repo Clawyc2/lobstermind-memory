@@ -2,6 +2,23 @@
 
 ## Long-Term Memory Plugin for OpenClaw
 
+> **The memory plugin that ACTUALLY works** — 298 lines, 1 command install, zero config  
+> **El plugin de memoria que REALMENTE funciona** — 298 líneas, 1 comando, cero config
+
+[![GitHub stars](https://img.shields.io/github/stars/pnll1991/lobstermind-memory?style=for-the-badge)](https://github.com/pnll1991/lobstermind-memory/stargazers)
+[![GitHub license](https://img.shields.io/github/license/pnll1991/lobstermind-memory?style=for-the-badge)](https://github.com/pnll1991/lobstermind-memory/blob/main/LICENSE)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.3.7+-blue?style=for-the-badge)](https://github.com/openclaw/openclaw)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=for-the-badge)](https://github.com/pnll1991/lobstermind-memory)
+
+| vs Gigabrain | LobsterMind |
+|--------------|-------------|
+| Lines of Code | **298** vs 2000+ |
+| Install Time | **1 min** vs 30+ min |
+| Dependencies | **1** vs 3+ |
+| Config Options | **0** vs 50+ |
+
+---
+
 **Author:** Paolozky  
 **Version:** 1.0.0  
 **License:** MIT  
@@ -12,10 +29,10 @@
 ## 🌟 Overview | Descripción General
 
 **English:**  
-LobsterMind Memory is a fully functional long-term memory plugin for OpenClaw that enables your AI assistant to remember conversations, facts, and preferences across sessions. Unlike other memory plugins, LobsterMind actually works out of the box with proper SQLite storage, semantic search via embeddings, and automatic Obsidian sync.
+LobsterMind Memory is a fully functional long-term memory plugin for OpenClaw that enables your AI assistant to remember conversations, facts, and preferences across sessions. Unlike other memory plugins (like Gigabrain with 2000+ lines, Python dependencies, and complex setup), LobsterMind actually works out of the box with proper SQLite storage, semantic search via embeddings, and automatic Obsidian sync. **One command to install, zero config, just works.**
 
 **Español:**  
-LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional para OpenClaw que permite a tu asistente de IA recordar conversaciones, hechos y preferencias entre sesiones. A diferencia de otros plugins de memoria, LobsterMind funciona correctamente desde el inicio con almacenamiento SQLite, búsqueda semántica mediante embeddings, y sincronización automática con Obsidian.
+LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional para OpenClaw que permite a tu asistente de IA recordar conversaciones, hechos y preferencias entre sesiones. A diferencia de otros plugins de memoria (como Gigabrain con 2000+ líneas, dependencias de Python, y setup complejo), LobsterMind funciona correctamente desde el inicio con almacenamiento SQLite, búsqueda semántica mediante embeddings, y sincronización automática con Obsidian. **Un comando para instalar, cero configuración, simplemente funciona.**
 
 ---
 
@@ -42,6 +59,132 @@ LobsterMind Memory es un plugin de memoria a largo plazo totalmente funcional pa
 - **Captura Automática**: Captura memorias automáticamente desde tags `<memory_note>` en conversaciones
 - **Hooks de Recall**: Inyecta memorias relevantes antes de cada respuesta de la IA
 - **Cero Configuración**: Funciona inmediatamente después de la instalación
+
+---
+
+## ⚡ LobsterMind vs Gigabrain - Comparación Directa
+
+### Tabla Rápida
+
+| Característica | **LobsterMind** | **Gigabrain** |
+|----------------|-----------------|---------------|
+| **Líneas de código** | 298 (1 archivo) | 2000+ (50+ archivos) |
+| **Instalación** | 1 comando | Wizard complejo + config |
+| **Dependencias** | Node.js 22+ | Node.js + Python + Ollama |
+| **Configuración** | Cero configuración | 50+ opciones JSON |
+| **Obsidian** | 1 archivo `Memories.md` | 40+ carpetas y vistas |
+| **CLI** | 3 comandos simples | 20+ subcomandos complejos |
+| **Embeddings** | API + fallback hash | Ollama local (modelo 9B+) |
+| **Windows** | ✅ Nativo | ⚠️ Problemático |
+| **Mantenimiento** | Ninguno | Nightly pipeline + audits |
+| **Tamaño download** | ~50 KB | ~5 MB+ |
+
+### Comparación Detallada
+
+#### 🎯 Filosofía de Diseño
+
+**LobsterMind:**
+> "Hagamos algo que funcione, sea simple, y cualquier persona pueda instalar en 1 minuto"
+
+**Gigabrain:**
+> "Construyamos el sistema de memoria más completo y académico, aunque requiera un PhD para usarlo"
+
+#### 📦 Complejidad
+
+**Gigabrain requiere:**
+- ❌ Python 3.10+ además de Node.js
+- ❌ Ollama con modelos de 9B+ (4GB+ RAM)
+- ❌ FastAPI para web console
+- ❌ Entender "memoria híbrida", "registry projections", "native sync"
+- ❌ Configurar 50+ opciones en JSON
+- ❌ Ejecutar nightly pipelines, audits, snapshots
+
+**LobsterMind requiere:**
+- ✅ Node.js 22+
+- ✅ 1 comando de instalación
+- ✅ Usar
+
+#### 🔧 Obsidian
+
+**Gigabrain genera:**
+```
+obsidian-vault/Gigabrain/
+├── 00 Home/
+├── 10 Native/
+├── 20 Nodes/active/
+├── 20 Nodes/archived/
+├── 30 Views/ (6+ archivos)
+├── 40 Reports/ (4+ archivos)
+└── Inbox/
+```
+
+**LobsterMind genera:**
+```
+obsidian-vault/Gigabrain/
+└── Memories.md  ← Un solo archivo limpio
+```
+
+#### 🧠 Embeddings
+
+**Gigabrain:**
+1. Instala Ollama
+2. Descarga modelo `qwen3.5:9b` (4GB+)
+3. Configura embeddings locales
+4. Si Ollama falla → no hay búsqueda semántica
+
+**LobsterMind:**
+1. DashScope API (sin downloads)
+2. Si API falla → fallback hash automático
+3. Siempre funciona
+
+#### 💻 CLI
+
+**Gigabrain:**
+```bash
+node scripts/gigabrainctl.js nightly --config ~/.openclaw/openclaw.json
+node scripts/gigabrainctl.js vault build --skip-reports
+node scripts/gigabrainctl.js audit --mode apply --threshold 0.78
+```
+
+**LobsterMind:**
+```bash
+openclaw memories --list
+openclaw memories --add "Tu memoria"
+openclaw memories --search "búsqueda"
+```
+
+### 📊 ¿Cuál Elegir?
+
+| Si querés... | Elegí... |
+|--------------|----------|
+| Investigar sistemas de memoria | Gigabrain |
+| Arquitectura compleja académica | Gigabrain |
+| Control total de cada setting | Gigabrain |
+| **Que funcione YA** | **LobsterMind** |
+| **Instalar en 1 minuto** | **LobsterMind** |
+| **Entender tu plugin** | **LobsterMind** |
+| **Windows sin dolor** | **LobsterMind** |
+| **Sin Python/Ollama** | **LobsterMind** |
+| **Simplicidad** | **LobsterMind** |
+
+### 💬 Para los Escépticos
+
+> "Pero Gigabrain tiene más features..."
+
+**Respuesta:** ¿Cuántas usás realmente?
+
+- ❌ Web console: ¿Quién la usa para memoria personal?
+- ❌ Benchmarking: ¿Necesitás benchmarks en producción?
+- ❌ Audit pipeline: ¿Archivás/comprimís memorias manualmente?
+- ❌ Entity graph: ¿Realmente necesitás tracking de personas?
+- ❌ Nightly metrics: ¿Leés reports de métricas?
+
+**LobsterMind tiene lo que importa:**
+- ✅ Guardar memorias
+- ✅ Buscar memorias
+- ✅ Ver memorias
+- ✅ Sync con Obsidian
+- ✅ Funciona siempre
 
 ---
 
