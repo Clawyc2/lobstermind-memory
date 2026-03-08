@@ -130,22 +130,35 @@ const lobsterMindPlugin = {
   }
   
   async function captureMemory(content: string, type: string = 'USER_FACT', confidence: number = 0.7, skipSync: boolean = false): Promise<string> {
-    const id = createHash('sha256').update(content).digest('hex').substring(0, 16);
     const now = new Date().toISOString();
     
-    // Check for existing
-    const existing = db.prepare('SELECT id FROM memories WHERE id = ?').get(id);
-    if (existing) {
+    // AUTO-DEDUPLICATION: Check for similar memories before creating new one
+    const similarMemories = await findSimilarMemories(content, 0.85);
+    if (similarMemories.length > 0) {
+      // Update existing memory instead of creating duplicate
+      const existingMemory = similarMemories[0];
+      console.log('[lobstermind] Auto-dedup: Found similar memory (score:', existingMemory.score.toFixed(2), ')');
+      console.log('[lobstermind] Auto-dedup: Updating instead of creating duplicate');
+      
       db.prepare('UPDATE memories SET content = ?, type = ?, confidence = ?, updated_at = ? WHERE id = ?')
-        .run(content, type, confidence, now, id);
+        .run(content, type, confidence, now, existingMemory.id);
+      
+      // Sync to Obsidian
+      if (!skipSync) {
+        syncToObsidian(content, type, confidence, now);
+      }
+      
       console.log('[lobstermind] Updated memory:', content.substring(0, 50));
-      return id;
+      return existingMemory.id;
     }
+    
+    // Generate unique ID for new memory
+    const id = createHash('sha256').update(content).digest('hex').substring(0, 16);
     
     // Get embedding
     const embedding = await getEmbedding(content);
     
-    // Insert
+    // Insert new memory
     db.prepare('INSERT INTO memories (id, content, type, confidence, embedding, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, content, type, confidence, JSON.stringify(embedding), now, now);
     
@@ -156,6 +169,22 @@ const lobsterMindPlugin = {
     
     console.log('[lobstermind] Captured memory:', content.substring(0, 50));
     return id;
+  }
+  
+  async function findSimilarMemories(query: string, threshold: number = 0.85): Promise<{id: string, content: string, score: number}[]> {
+    const queryEmbedding = await getEmbedding(query);
+    const memories = db.prepare('SELECT id, content, embedding FROM memories').all() as MemoryRecord[];
+    
+    const scored = memories
+      .map(m => {
+        const embedding = JSON.parse(m.embedding || '[]');
+        const score = cosineSimilarity(queryEmbedding, embedding);
+        return { id: m.id, content: m.content, score };
+      })
+      .filter(m => m.score >= threshold)
+      .sort((a, b) => b.score - a.score);
+    
+    return scored;
   }
   
   async function recallMemories(query: string, topK: number = 8, minScore: number = 0.45): Promise<MemoryRecord[]> {
