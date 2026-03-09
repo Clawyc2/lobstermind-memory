@@ -44,6 +44,37 @@ export default {
       return id;
     };
     
+    // Auto-capture memories from <memory_note> tags in conversation
+    if (api.on) {
+      api.on('before_model_resolve', (event: any, ctx: any) => {
+        const messages = ctx?.messages || [];
+        for (const msg of messages.slice(-5)) {
+          if (msg.role === 'assistant' && msg.content) {
+            const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || []);
+            const matches = content.match(/<memory_note[^>]*>(.*?)<\/memory_note>/gs);
+            if (matches) {
+              for (const match of matches) {
+                try {
+                  const contentMatch = match.match(/>(.*?)</s);
+                  const memoryContent = contentMatch?.[1];
+                  if (!memoryContent) continue;
+                  
+                  const type = match.match(/type="([^"]*)"/)?.[1] || 'USER_FACT';
+                  const conf = parseFloat(match.match(/confidence="([^"]*)"/)?.[1] || '0.7');
+                  
+                  if (memoryContent.length >= 25) {
+                    save(memoryContent, type, conf);
+                  }
+                } catch (err: any) {
+                  console.error('[lobstermind] Memory capture error:', err.message);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+    
     const search = (q: string, k = 8) => { const qe = embed(q); return (db.prepare('SELECT * FROM memories').all() as any[]).map(m => ({...m, score: ((a:number[],b:number[])=>{const d=a.reduce((s,ai,i)=>s+ai*b[i],0),na=Math.sqrt(a.reduce((s,ai)=>s+ai*ai,0)),nb=Math.sqrt(b.reduce((s,bi)=>s+bi*bi,0));return na&&nb?d/(na*nb):0;})(qe,JSON.parse(m.embedding||'[]'))})).filter(m=>m.score>=0.3).sort((a,b)=>b.score-a.score).slice(0,k); };
     
     if (api.registerCli) {
