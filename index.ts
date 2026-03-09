@@ -34,14 +34,9 @@ export default {
       try {
         const date = now.split('T')[0];
         const obs = join(obsidianDir, 'Memories.md');
-        const entry = '- [' + t + '] ' + c + ' (' + conf.toFixed(2) + ')
-';
-        if (!existsSync(obs)) writeFileSync(obs, '# Memories
-
-Auto-created by LobsterMind Memory plugin
-
-' + entry + '
-', 'utf-8');
+        const entry = '- [' + t + '] ' + c + ' (confidence: ' + conf.toFixed(2) + ')\n';
+        if (!existsSync(obs)) {
+          writeFileSync(obs, `# Memories\n\nAuto-created by LobsterMind Memory plugin\n\n## [[${date}]]\n\n${entry}\n`, 'utf-8');
         else { const e = readFileSync(obs, 'utf-8'); if (!e.includes(entry.trim())) appendFileSync(obs, entry, 'utf-8'); }
         console.log('[lobstermind] ✅ Synced to Obsidian');
       } catch (err: any) { console.error('[lobstermind] ❌ Obsidian sync error:', err.message); }
@@ -49,17 +44,12 @@ Auto-created by LobsterMind Memory plugin
       // Native MEMORY.md sync
       try {
         const nativePath = join(ws, 'MEMORY.md');
-        const nativeEntry = '- [' + t + '] ' + c + ' (confidence: ' + conf.toFixed(2) + ')
-';
+        const nativeEntry = '- [' + t + '] ' + c + ' (confidence: ' + conf.toFixed(2) + ')\n';
         let content = '';
         if (existsSync(nativePath)) {
           content = readFileSync(nativePath, 'utf-8');
         } else {
-          writeFileSync(nativePath, '# Memories
-
-Auto-created by LobsterMind Memory plugin
-
-', 'utf-8');
+          writeFileSync(nativePath, '# Memories\n\nAuto-created by LobsterMind Memory plugin\n\n', 'utf-8');
           content = '';
         }
         if (!content.includes(nativeEntry.trim())) {
@@ -67,14 +57,6 @@ Auto-created by LobsterMind Memory plugin
           console.log('[lobstermind] ✅ Synced to MEMORY.md');
         }
       } catch (err: any) { console.error('[lobstermind] ❌ MEMORY.md sync error:', err.message); }
-      try {
-        const date = now.split('T')[0];
-        const obs = join(obsidianDir, 'Memories.md');
-        const entry = '- [' + t + '] ' + c + ' (' + conf.toFixed(2) + ')\n';
-        if (!existsSync(obs)) writeFileSync(obs, '# Memories\n\n## [[' + date + ']]\n\n' + entry + '\n');
-        else { const e = readFileSync(obs, 'utf-8'); if (!e.includes(entry.trim())) appendFileSync(obs, entry); }
-        console.log('[lobstermind] ✓ Obsidian synced');
-      } catch (err: any) { console.error('[lobstermind] ✗ Obsidian error:', err.message); }
       
       console.log('[lobstermind] Saved [' + t + ']:', c.slice(0, 40));
       return id;
