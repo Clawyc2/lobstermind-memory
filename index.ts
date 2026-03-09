@@ -65,103 +65,82 @@ export default {
       return id;
     };
     
-    // Auto-capture memories from <memory_note> tags in conversation
+    // Auto-detect memories from natural language in user messages (multi-language)
     if (api.on) {
       api.on('after_response', (event: any, ctx: any) => {
-        // Only process when a new assistant response is available
         const messages = ctx?.messages || event?.messages || [];
-        if (!messages.length) return;
         
-        // Get the last message (should be assistant's response)
-        const lastMessage = messages[messages.length - 1];
+        // Process recent user messages for memory capture
+        const userMessages = messages.filter((m: any) => m?.role === 'user').slice(-5);
         
-        if (lastMessage?.role === 'assistant' && lastMessage.content) {
-          const content = typeof lastMessage.content === 'string' 
-            ? lastMessage.content 
-            : JSON.stringify(lastMessage.content);
-          
-          const matches = content.match(/<memory_note[^>]*>(.*?)<\/memory_note>/gs);
-          if (matches) {
-            console.log('[lobstermind] Found memory_note tags:', matches.length);
+        for (const msg of userMessages) {
+          if (msg.content) {
+            const content = typeof msg.content === 'string' 
+              ? msg.content 
+              : JSON.stringify(msg.content || '');
             
-            for (const match of matches) {
-              try {
-                const contentMatch = match.match(/>(.*?)</);
-                const memoryContent = contentMatch?.[1];
-                if (!memoryContent) continue;
-                
-                const type = match.match(/type="([^"]*)"/)?.[1] || 'USER_FACT';
-                const confidence = parseFloat(match.match(/confidence="([^"]*)"/)?.[1] || '0.7');
-                
-                if (memoryContent.length >= 25) {
-                  console.log('[lobstermind] Capturing:', type, '-', memoryContent.substring(0, 60));
-                  save(memoryContent, type, confidence);
-                }
-              } catch (err: any) {
-                console.error('[lobstermind] Memory extraction error:', err.message);
-              }
+            // Multi-language classifier (Spanish + English + Portuguese)
+            const classified = classifyMemoryContent(content);
+            
+            if (classified.shouldSave && classified.content.length >= 15) {
+              console.log(`[lobstermind] Auto-detected [${classified.type}] (confidence: ${classified.confidence.toFixed(2)}): ${classified.content.substring(0, 80)}...`);
+              save(classified.content, classified.type, classified.confidence);
             }
           }
         }
       });
     }
     
-    // Auto-detect memories from natural language in user messages  
-    if (api.on) {
-      api.on('after_response', (event: any, ctx: any) => {
-        const messages = ctx?.messages || event?.messages || [];
+    // Memory content classifier - handles multiple languages by semantic meaning
+    function classifyMemoryContent(rawContent: string): { content: string, type: string, confidence: number, shouldSave: boolean } {
+      // Remove special tags and normalize
+      const cleanContent = rawContent.replace(/<[\/]?memory_note[^>]*>/g, '').trim();
+      
+      // Multi-lang patterns for detection without relying on specific grammar patterns
+      const patterns = [
+        // PREFERENCES (likes/dislikes in multiple languages)
+        { regex: /(like|love|adore|prefer|enjoy|gusta|amo|adoro|prefiero|mencenta|odio|detesto|nogusta)/i, type: 'PREFERENCE', confidence: 0.95 },
         
-        // Scan recent user messages for natural language patterns
-        const userMessages = messages.filter((m: any) => m?.role === 'user').slice(-5);
+        // FACTS (identity in multiple languages)
+        { regex: /\b(I\s+am|I'm|soy|yo\s+soy|trabajo|work|desarrollo|develop|vivo\s+en|live\s+in|estudio|study)/i, type: 'USER_FACT', confidence: 0.85 },
         
-        for (const msg of userMessages) {
-          if (msg.content) {
-            const content = typeof msg.content === 'string' 
-              ? msg.content.toLowerCase()
-              : JSON.stringify(msg.content || '');
-            
-            // User facts pattern detection
-            const factMatches = [
-              // soy de/soy del/soy un/son
-              { type: 'USER_FACT', regex: /\bsoy (de|del|de la|un|una)\s+([^.,!?]+)/g },
-              // trabajo con/trabajé en
-              { type: 'USER_FACT', regex: /\b(trabaj(o|aba|é) con|trabajo en|trabaj(o|aba)\s+(con|en|durante))\s+([^.,!?]+)/gi },
-              // vivo en  
-              { type: 'USER_FACT', regex: /\b(vivo|viv(o|ía|imos) en|vive)\s+([^.,!?]+)/gi },
-              // tengo/tengo un/tengo una
-              { type: 'USER_FACT', regex: /\b(tengo|tuve|tenía|tengo un|tengo una)\s+([^.,!?]+)/gi }
-            ];
-            
-            // Preference patterns
-            const prefMatches = [
-              // prefiero/me gusta/adoro
-              { type: 'PREFERENCE', regex: /\b(prefiero|me gusta|adoro|amo|me encanta|mi favorito) ([^.,!?]+)/gi },
-              // odio/no me gusta
-              { type: 'PREFERENCE', regex: /\b(odio|detesto|no me gusta|no soporto|molesta)\s+([^.,!?]+)/gi }
-            ];
-            
-            // Decision patterns  
-            const decisionMatches = [
-              // decidí/elegí/opté
-              { type: 'DECISION', regex: /\b(decid(o|i|í)|eleg(o|i|í)|opt(e|é) por)\s+([^.,!?]+)/gi }
-            ];
-            
-            // Scan for each type of pattern
-            for (const { type, regex } of [...factMatches, ...prefMatches, ...decisionMatches]) {
-              const matches = content.matchAll(regex);
-              for (const match of matches) {
-                const extracted = (match[2] || match[1] || match[0])?.trim();
-                if (extracted && extracted.length >= 15) {
-                  const normalized = extracted.replace(/[.,!?]/g, ' ').trim();
-                  console.log(`[lobstermind] Auto-detected [${type}]: ${normalized}`);
-                  save(normalized, type, 0.75);
-                }
-              }
-            }
-          }
+        // DECISIONS (choices in multiple languages)
+        { regex: /\b(decid|eleg|opt|chos|select|pick|take)\s+(by|for|with|on)\b/i, type: 'DECISION', confidence: 0.90 },
+        
+        // TECH PREDICATES (technical preferences commonly expressed)
+        { regex: /\b(used|working|developing|building|coded|programming|coded\s+with|writing\s+in|chose|selected|picked)\s+([^.,!?]+)/i, type: 'USER_FACT', confidence: 0.80 },
+      ];
+      
+      // Scan for pattern matches
+      for (const { regex, type, confidence } of patterns) {
+        if (regex.test(cleanContent.replace(/\b(the|a|an|un|una|el|la|los|las|en|con|de|del|de\s+la|to|with|my|his|her)\b/g, ' ').toLowerCase())) {
+          return {
+            content: cleanContent,
+            type: type,
+            confidence: confidence,
+            shouldSave: true
+          };
         }
-      });
-    }
+      }
+      
+      // General rule: statements longer than 25 chars without questions are user facts
+      if (cleanContent.length >= 25 && !cleanContent.includes('?')) {
+        return {
+          content: cleanContent,
+          type: 'USER_FACT',
+          confidence: 0.70,  // Lower confidence for generic detection
+          shouldSave: true
+        };
+      }
+      
+      // Don't save if not meaningful
+      return {
+        content: cleanContent,
+        type: 'IGNORE',
+        confidence: 0.0,
+        shouldSave: false
+      };
+    } 
     
     const search = (q: string, k = 8) => { const qe = embed(q); return (db.prepare('SELECT * FROM memories').all() as any[]).map(m => ({...m, score: ((a:number[],b:number[])=>{const d=a.reduce((s,ai,i)=>s+ai*b[i],0),na=Math.sqrt(a.reduce((s,ai)=>s+ai*ai,0)),nb=Math.sqrt(b.reduce((s,bi)=>s+bi*bi,0));return na&&nb?d/(na*nb):0;})(qe,JSON.parse(m.embedding||'[]'))})).filter(m=>m.score>=0.3).sort((a,b)=>b.score-a.score).slice(0,k); };
     
