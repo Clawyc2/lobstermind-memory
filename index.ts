@@ -46,28 +46,38 @@ export default {
     
     // Auto-capture memories from <memory_note> tags in conversation
     if (api.on) {
-      api.on('before_model_resolve', (event: any, ctx: any) => {
-        const messages = ctx?.messages || [];
-        for (const msg of messages.slice(-5)) {
-          if (msg.role === 'assistant' && msg.content) {
-            const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || []);
-            const matches = content.match(/<memory_note[^>]*>(.*?)<\/memory_note>/gs);
-            if (matches) {
-              for (const match of matches) {
-                try {
-                  const contentMatch = match.match(/>(.*?)</s);
-                  const memoryContent = contentMatch?.[1];
-                  if (!memoryContent) continue;
-                  
-                  const type = match.match(/type="([^"]*)"/)?.[1] || 'USER_FACT';
-                  const conf = parseFloat(match.match(/confidence="([^"]*)"/)?.[1] || '0.7');
-                  
-                  if (memoryContent.length >= 25) {
-                    save(memoryContent, type, conf);
-                  }
-                } catch (err: any) {
-                  console.error('[lobstermind] Memory capture error:', err.message);
+      api.on('after_model_resolved', (event: any, ctx: any) => {
+        // Only process when a new assistant response is available
+        const messages = ctx?.messages || event?.messages || [];
+        if (!messages.length) return;
+        
+        // Get the last message (should be assistant's response)
+        const lastMessage = messages[messages.length - 1];
+        
+        if (lastMessage?.role === 'assistant' && lastMessage.content) {
+          const content = typeof lastMessage.content === 'string' 
+            ? lastMessage.content 
+            : JSON.stringify(lastMessage.content);
+          
+          const matches = content.match(/<memory_note[^>]*>(.*?)<\/memory_note>/gs);
+          if (matches) {
+            console.log('[lobstermind] Found memory_note tags:', matches.length);
+            
+            for (const match of matches) {
+              try {
+                const contentMatch = match.match(/>(.*?)</);
+                const memoryContent = contentMatch?.[1];
+                if (!memoryContent) continue;
+                
+                const type = match.match(/type="([^"]*)"/)?.[1] || 'USER_FACT';
+                const confidence = parseFloat(match.match(/confidence="([^"]*)"/)?.[1] || '0.7');
+                
+                if (memoryContent.length >= 25) {
+                  console.log('[lobstermind] Capturing:', type, '-', memoryContent.substring(0, 60));
+                  save(memoryContent, type, confidence);
                 }
+              } catch (err: any) {
+                console.error('[lobstermind] Memory extraction error:', err.message);
               }
             }
           }
