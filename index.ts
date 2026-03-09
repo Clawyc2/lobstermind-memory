@@ -533,7 +533,7 @@ const lobsterMindPlugin = {
     }
   });
   
-  // Hook: After agent turn - capture memories from assistant response
+  // Hook: After agent turn - capture memories from assistant response (manual memory_note tags)
   api.on('before_model_resolve', async (event: any, ctx: any) => {
     // Check for memory_note tags in recent messages
     const messages = ctx?.messages || [];
@@ -557,6 +557,58 @@ const lobsterMindPlugin = {
               }
             }
           }
+        }
+      }
+    }
+    
+    // ALSO: Auto-capture from user's last message (natural language)
+    const lastUserMessage = messages.slice(-10).find(m => m?.role === 'user');
+    if (lastUserMessage?.content) {
+      const content = typeof lastUserMessage.content === 'string' 
+        ? lastUserMessage.content 
+        : lastUserMessage.content.map((p: any) => p.text || '').join(' ');
+      
+      // Detect memory capture patterns
+      const memoryPatterns = [
+        { pattern: /\b(record[aá]|guard[aá]|anot[aá]|memoriz[aá])\s+(que|esto)\s+(.*)/i, type: 'AUTO_DETECT' },
+        { pattern: /\bquiero\s+(que\s+)?record(és|es)\s+(que\s+)?(.*)/i, type: 'AUTO_DETECT' },
+        { pattern: /\bes\s+importante\s+(que\s+)?(.*)/i, type: 'PREFERENCE' },
+        { pattern: /\bprefer(o|ís|es)\s+(.*)/i, type: 'PREFERENCE' },
+        { pattern: /\bme\s+gusta\s+(.*)/i, type: 'PREFERENCE' },
+        { pattern: /\btrabaj(o|ás|o)\s+(en|con)\s+(.*)/i, type: 'USER_FACT' },
+        { pattern: /\bsoy\s+(de|del|la)\s+(.*)/i, type: 'USER_FACT' },
+        { pattern: /\btengo\s+(un|una|unos|unas)\s+(.*)/i, type: 'USER_FACT' },
+        { pattern: /\bvivo\s+(en|cerca|lejos)\s+(.*)/i, type: 'USER_FACT' },
+        { pattern: /\bdecid(o|ís|e)\s+(.*)/i, type: 'DECISION' },
+        { pattern: /\bmi\s+(proyecto|app|sistema|startup)\s+(es|se llama|trata de)\s+(.*)/i, type: 'PROJECT' },
+      ];
+      
+      for (const { pattern, type } of memoryPatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          let memoryContent = content;
+          if (match[3]) {
+            memoryContent = match[3].trim();
+          } else if (match[2]) {
+            memoryContent = match[2].trim();
+          }
+          
+          let detectedType = type;
+          if (type === 'AUTO_DETECT') {
+            detectedType = detectMemoryType(memoryContent);
+          }
+          
+          if (memoryContent.length >= 15) {
+            console.log(`[lobstermind] Auto-capture: "${memoryContent.substring(0, 50)}..."`);
+            console.log(`[lobstermind] Type: ${detectedType}`);
+            
+            try {
+              await captureMemory(memoryContent, detectedType, 0.8, false);
+            } catch (err: any) {
+              console.error('[lobstermind] Auto-capture error:', err.message);
+            }
+          }
+          break;
         }
       }
     }
