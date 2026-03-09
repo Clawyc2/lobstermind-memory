@@ -92,6 +92,50 @@ export default {
       return id;
     };
     
+    // Memory relations: Find and create relationships between memories automatically
+    async function linkMemories(content: string, newMemoryId: string) {
+      try {
+        // Calculate similarity to existing memories in last 50 entries
+        const existing = db.prepare('SELECT id, content, embedding FROM memories ORDER BY created_at DESC LIMIT 50').all() as any[];
+        const newEmbedding = embed(content);  // Use existing local embedding function
+        
+        for (const memory of existing) {
+          if (memory.id === newMemoryId) continue;
+          
+          const memEmbedding = JSON.parse(memory.embedding || '[]');
+          const similarity = calculateCosineSimilarity(newEmbedding, memEmbedding) || 0;
+          
+          if (similarity >= 0.6) {  // Link if 60% similar
+            // Create relation both ways
+            db.prepare(`
+              INSERT OR REPLACE INTO memory_relations (from_id, to_id, relation_type, weight, created_at) 
+              VALUES (?, ?, ?, ?, ?)
+            `).run(newMemoryId, memory.id, 'related_to', similarity, new Date().toISOString());
+            
+            // Reverse relation
+            db.prepare(`
+              INSERT OR REPLACE INTO memory_relations (from_id, to_id, relation_type, weight, created_at) 
+              VALUES (?, ?, ?, ?, ?)
+            `).run(memory.id, newMemoryId, 'related_by', similarity * 0.7, new Date().toISOString());
+            
+            console.log(`[lobstermind] Linked: "${content.substring(0,40)}" ↔ "${memory.content.substring(0,40)}" (similarity: ${similarity.toFixed(2)})`);
+          }
+        }
+      } catch (err: any) {
+        console.error('[lobstermind] Relations error:', err.message);
+      }
+    }
+    
+    function calculateCosineSimilarity(a: number[], b: number[]): number {
+      if (a.length !== b.length || a.length === 0) return 0;
+      
+      const dotProduct = a.reduce((sum, val, i) => sum + val * (b[i] || 0), 0);
+      const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+      const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+      
+      return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
+    }
+    
     // Auto-detect memories from natural language in user messages (multi-language)
     if (api.on) {
       api.on('after_response', (event: any, ctx: any) => {
