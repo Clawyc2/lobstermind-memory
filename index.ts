@@ -938,63 +938,57 @@ export default {
       // Fallback to available hooks with correct signature that OpenClaw supports
       console.log('[lobstermind] Using fallback hook registration approach');
       
-      // Try to identify specific events for user input
-      const userInputEvents = [
-        'user_input_received',    // Ideal event based on your suggestion
-        'message_intercepted',    // Intercept all messages
-        'context_updated',        // Context changes might contain user input
-        'user_message',          // Generic user message event
-        'participant_said',      // When a participant says something
-        'before_request',        // Right before processing user request
-        'user_interaction'       // Generic user interaction event
-      ];
+      // Instead of trying many random event names, we'll check for known OpenClaw hooks
+      // and register appropriately - this addresses the warnings from the doctor
       
-      // Also try regular message events
-      const allEvents = [...userInputEvents, 'message_create', 'conversation_start', 'conversation_update', 'user_input', 'agent_think', 'response_generate', 'before_response', 'after_thought', 'memory_inject', 'prompt_build', 'message_process'];
-      
-      for (const eventName of allEvents) {
-        if (typeof api.on === 'function') {
-          try {
-            api.on(eventName, (payload: any) => {
-              console.log(`[lobstermind] Event '${eventName}' triggered for automatic capture`);
-              
-              // Different payload structures handling
-              if (payload?.user_input || payload?.input || payload?.content) {
-                const userInput = payload.user_input || payload.input || payload.content || payload.msg || payload.message;
-                if (userInput && typeof userInput === 'string') {
-                  console.log(`[lobstermind] Processing direct user input from '${eventName}': ${userInput.substring(0, 150)}...`);
-                  
-                  // Check for Gigabrain memory note protocol
-                  if (userInput.includes('<memory_note>') && userInput.includes('</memory_note>')) {
-                    console.log('[lobstermind] Detected Gigabrain memory_note protocol in event');
-                    extractMemoryFromNoteTags(userInput).forEach(memory => {
-                      save(memory.content, memory.type, memory.confidence);
-                    });
-                  } else {
-                    // Process for automatic capture
-                    processUserInputForMemory(userInput);
-                  }
-                }
-              }
-              // Handle array of messages
-              else if (payload?.messages && Array.isArray(payload.messages)) {
-                const userMessages = payload.messages.filter((msg: any) => msg?.role === 'user');
-                if (userMessages.length > 0) {
-                  // Process the most recent user message
-                  const lastUserMsg = userMessages[userMessages.length - 1];
-                  const content = typeof lastUserMsg === 'string' ? lastUserMsg : (lastUserMsg?.content || JSON.stringify(lastUserMsg || ''));
-                  
-                  if (content && typeof content === 'string') {
-                    console.log(`[lobstermind] Processing latest user content from payload '${eventName}': ${content.substring(0, 100)}...`);
-                    
-                    // Check for Gigabrain memory note protocol
-                    if (content.includes('<memory_note>') && content.includes('</memory_note>')) {
-                      console.log('[lobstermind] Detected Gigabrain memory_note protocol in message payload');
-                      extractMemoryFromNoteTags(content).forEach(memory => {
-                        save(memory.content, memory.type, memory.confidence);
-                      });
-                    } else {
-                      // Process for automatic capture
+      // Known functional OpenClaw hooks
+      if (typeof api.hooks?.onMessageCreate === 'function') {
+        api.hooks.onMessageCreate((message: any) => {
+          console.log('[lobstermind] onMessageCreate hook triggered for automatic capture');
+          const content = typeof message === 'string' ? message : (message?.content || message?.message || '');
+          if (content && typeof content === 'string') {
+            console.log(`[lobstermind] Processing content from onMessageCreate: ${content.substring(0, 100)}...`);
+            processContentForMemory(content);
+          }
+        });
+        console.log('[lobstermind] Registered official hook: onMessageCreate');
+      } else if (typeof api.hooks?.afterMessage === 'function') {
+        api.hooks.afterMessage((message: any) => {
+          console.log('[lobstermind] afterMessage hook triggered for automatic capture');
+          const content = typeof message === 'string' ? message : (message?.content || message?.message || '');
+          if (content && typeof content === 'string') {
+            console.log(`[lobstermind] Processing content from afterMessage: ${content.substring(0, 100)}...`);
+            processContentForMemory(content);
+          }
+        });
+        console.log('[lobstermind] Registered official hook: afterMessage');
+      } else if (typeof api.hooks?.beforeRequest === 'function') {
+        api.hooks.beforeRequest((context: any) => {
+          console.log('[lobstermind] beforeRequest hook triggered for automatic capture');
+          const content = context?.input || context?.user_input || (context?.content || '');
+          if (content && typeof content === 'string') {
+            console.log(`[lobstermind] Processing content from beforeRequest: ${content.substring(0, 100)}...`);
+            processContentForMemory(content);
+          }
+        });
+        console.log('[lobstermind] Registered official hook: beforeRequest');
+      }
+                
+      // Helper function to handle various content sources
+      function processContentForMemory(content: string) {
+        if (content && typeof content === 'string') {
+          // Check for Gigabrain memory note protocol
+          if (content.includes('<memory_note>') && content.includes('</memory_note>')) {
+            console.log('[lobstermind] Detected Gigabrain memory_note protocol in event');
+            extractMemoryFromNoteTags(content).forEach(memory => {
+              save(memory.content, memory.type, memory.confidence);
+            });
+          } else {
+            // Process for automatic capture
+            processUserInputForMemory(content);
+          }
+        }
+      }
                       processUserInputForMemory(content);
                     }
                   }
@@ -1062,20 +1056,20 @@ export default {
         recallAndInjectMemories(ctx);
       });
     } else {
-      // Fallback recall system - try common event names
-      const recallEvents = ['before_response', 'agent_respond', 'prompt_prepare', 'request_build'];
-      
-      for (const event of recallEvents) {
-        if (typeof api.on === 'function') {
-          try {
-            api.on(event, (ctx: any) => {
-              console.log(`[lobstermind] Recall trigger: '${event}'`);
-              recallAndInjectMemories(ctx);
-            });
-          } catch (e) {
-            console.log(`[lobstermind] Recall event '${event}' not supported for recall:`, e.message);
-          }
-        }
+      // For recall, try to use only established OpenClaw hooks instead of generic event names
+      // Use proper api.hooks patterns
+      if (typeof api.hooks?.beforeResponse === 'function') {
+        api.hooks.beforeResponse((ctx: any) => {
+          console.log('[lobstermind] Recall trigger: beforeResponse');
+          recallAndInjectMemories(ctx);
+        });
+        console.log('[lobstermind] Registered recall hook for beforeResponse');
+      } else if (typeof api.hooks?.beforePrompt === 'function') {
+        api.hooks.beforePrompt((ctx: any) => {
+          console.log('[lobstermind] Recall trigger: beforePrompt');
+          recallAndInjectMemories(ctx);
+        });
+        console.log('[lobstermind] Registered recall hook for beforePrompt');
       }
     }
 

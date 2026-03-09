@@ -22,8 +22,7 @@
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "echo \"No tests specified\" && exit 0",
-    "postinstall": "node postinstall.js"
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2"
