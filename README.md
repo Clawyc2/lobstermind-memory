@@ -11,8 +11,7 @@ Community memory plugin for OpenClaw with persistent contextual information extr
 
 ### File System Sync
 - **Native Memory**: `workspace/MEMORY.md` (direct OpenClaw integration)
-- **Obsidian Sync**: `workspace/memory/Memories.md` (synchronized with OpenClaw format)
-- **Obsidian Vault**: `workspace/obsidian-vault/LobsterMind/Memories.md` (dedicated vault folder) 
+- **Obsidian Sync**: `workspace/obsidian-vault/LobsterMind/Memories.md` (dedicated Obsidian vault folder) 
 - **Backup Storage**: `workspace/memory/backups/` (timestamped JSON exports)
 
 ### Caching Layer
