@@ -75,6 +75,174 @@ export default {
       CREATE INDEX IF NOT EXISTS idx_cluster_members_cluster ON cluster_members(cluster_id);
     `);
     
+    // ===== MEJORA #1: Auto-detección de patrones =====
+    const patternTracker = {
+      topicCounts: {} as Record<string, { count: number; lastSeen: string; samples: string[] }>,
+      THRESHOLD: 3, // Si algo se repite 3 veces, es patrón
+      WINDOW_HOURS: 168, // Buscar patrones en última semana
+      
+      track(topic: string, content: string) {
+        const key = topic.toLowerCase().trim();
+        if (key.length < 3) return;
+        
+        if (!this.topicCounts[key]) {
+          this.topicCounts[key] = { count: 0, lastSeen: '', samples: [] };
+        }
+        this.topicCounts[key].count++;
+        this.topicCounts[key].lastSeen = new Date().toISOString();
+        this.topicCounts[key].samples.push(content.substring(0, 100));
+        
+        // Keep only last 5 samples
+        if (this.topicCounts[key].samples.length > 5) {
+          this.topicCounts[key].samples.shift();
+        }
+        
+        console.log(`[lobstermind:patterns] Topic "${key}" count: ${this.topicCounts[key].count}`);
+        
+        // Auto-save as pattern when threshold reached
+        if (this.topicCounts[key].count === this.THRESHOLD) {
+          this.savePattern(key);
+        }
+      },
+      
+      savePattern(topic: string) {
+        const data = this.topicCounts[topic];
+        if (!data) return;
+        
+        const patternContent = `PATRÓN DETECTADO: "${topic}" mencionado ${data.count} veces. Ejemplos: ${data.samples.slice(0, 3).join(' | ')}`;
+        
+        // Check if pattern already exists
+        const existing = search(`PATRÓN DETECTADO: "${topic}"`, 3);
+        const alreadyExists = existing.some((m: any) => m.content.includes(`"${topic}"`) && m.type === 'PATTERN');
+        
+        if (!alreadyExists) {
+          save(patternContent, 'PATTERN', 0.95, '#patron #auto');
+          console.log(`[lobstermind:patterns] ✅ Auto-saved pattern: "${topic}" (${data.count} occurrences)`);
+        } else {
+          // Update confidence of existing pattern
+          const existingId = existing.find((m: any) => m.content.includes(`"${topic}"`) && m.type === 'PATTERN')?.id;
+          if (existingId) {
+            db.prepare('UPDATE memories SET confidence = MIN(confidence + 0.05, 1.0), updated_at = ? WHERE id = ?').run(new Date().toISOString(), existingId);
+            console.log(`[lobstermind:patterns] 📈 Updated confidence for pattern: "${topic}"`);
+          }
+        }
+      },
+      
+      getPatterns(): any[] {
+        return db.prepare("SELECT * FROM memories WHERE type = 'PATTERN' ORDER BY confidence DESC").all() as any[];
+      },
+      
+      stats() {
+        const patterns = Object.entries(this.topicCounts)
+          .filter(([_, v]) => v.count >= 2)
+          .sort((a, b) => b[1].count - a[1].count);
+        console.log(`[lobstermind:patterns] Top topics: ${patterns.slice(0, 10).map(([k, v]) => `${k}(${v.count})`).join(', ')}`);
+      }
+    };
+
+    // ===== MEJORA #6: Confidence score dinámico =====
+    const confidenceManager = {
+      BOOST_ON_ACCESS: 0.02,
+      DECAY_DAILY: 0.01,
+      MIN_CONFIDENCE: 0.1,
+      MAX_CONFIDENCE: 1.0,
+      MAX_ACCESS_COUNT: 50,
+      
+      boostOnAccess(memoryId: string) {
+        db.prepare('UPDATE memories SET confidence = MIN(confidence + ?, ?), access_count = COALESCE(access_count, 0) + 1, updated_at = ? WHERE id = ?')
+          .run(this.BOOST_ON_ACCESS, this.MAX_CONFIDENCE, new Date().toISOString(), memoryId);
+        console.log(`[lobstermind:confidence] Boosted: ${memoryId}`);
+      },
+      
+      decayAll() {
+        const result = db.prepare('UPDATE memories SET confidence = MAX(confidence - ?, ?), updated_at = ? WHERE confidence > ? AND type != ?')
+          .run(this.DECAY_DAILY, this.MIN_CONFIDENCE, new Date().toISOString(), this.MIN_CONFIDENCE, 'PATTERN');
+        console.log(`[lobstermind:confidence] Decayed ${result.changes} memories`);
+        return result.changes;
+      },
+      
+      topConfident(limit: number = 10): any[] {
+        return db.prepare('SELECT * FROM memories ORDER BY confidence DESC LIMIT ?').all(limit) as any[];
+      },
+      
+      lowConfidence(threshold: number = 0.2): any[] {
+        return db.prepare('SELECT * FROM memories WHERE confidence <= ? AND type != ? ORDER BY confidence ASC LIMIT 20').all(threshold, 'PATTERN') as any[];
+      }
+    };
+
+    // Run confidence decay once daily on startup
+    const lastDecayDate = db.prepare("SELECT key, value FROM plugin_meta WHERE key = 'last_confidence_decay'").get() as any;
+    const today = new Date().toISOString().split('T')[0];
+    if (!lastDecayDate || lastDecayDate.value !== today) {
+      try {
+        db.exec("CREATE TABLE IF NOT EXISTS plugin_meta (key TEXT PRIMARY KEY, value TEXT)");
+        db.prepare("INSERT OR REPLACE INTO plugin_meta (key, value) VALUES (?, ?)").run('last_confidence_decay', today);
+        confidenceManager.decayAll();
+        console.log('[lobstermind:confidence] Daily decay applied');
+      } catch (e: any) {
+        console.error('[lobstermind:confidence] Decay error:', e.message);
+      }
+    }
+
+    // Boost confidence on search access
+    const originalSearch = search;
+    function searchWithBoost(q: string, k: number = 8) {
+      const results = originalSearch(q, k);
+      // Boost accessed memories
+      results.forEach((m: any) => {
+        if (m.id) confidenceManager.boostOnAccess(m.id);
+      });
+      return results;
+    }
+
+    // ===== MEJORA #2: Recordatorios programados =====
+    const reminderManager = {
+      reminders: [] as any[],
+      
+      create(text: string, remindAt: string, context?: string) {
+        const id = createHash('sha256').update(`reminder:${text}:${remindAt}`).digest('hex').slice(0, 16);
+        const now = new Date().toISOString();
+        db.prepare('INSERT OR REPLACE INTO reminders (id, text, remind_at, context, created_at, status) VALUES (?, ?, ?, ?, ?, ?)').run(id, text, remindAt, context || null, now, 'pending');
+        console.log(`[lobstermind:reminders] ✅ Created reminder for: ${new Date(remindAt).toLocaleString()} - "${text.substring(0, 50)}"`);
+        return id;
+      },
+      
+      check() {
+        const now = new Date().toISOString();
+        const due = db.prepare("SELECT * FROM reminders WHERE status = 'pending' AND remind_at <= ?").all(now) as any[];
+        if (due.length > 0) {
+          console.log(`[lobstermind:reminders] 🔔 ${due.length} reminders due!`);
+          due.forEach(r => {
+            db.prepare("UPDATE reminders SET status = 'fired', fired_at = ? WHERE id = ?").run(now, r.id);
+            console.log(`[lobstermind:reminders] 🔔 FIRED: "${r.text}" (context: ${r.context || 'none'})`);
+          });
+        }
+        return due;
+      },
+      
+      list() {
+        return db.prepare("SELECT * FROM reminders WHERE status = 'pending' ORDER BY remind_at ASC").all() as any[];
+      },
+      
+      init() {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS reminders (
+            id TEXT PRIMARY KEY,
+            text TEXT NOT NULL,
+            remind_at TEXT NOT NULL,
+            context TEXT,
+            created_at TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            fired_at TEXT
+          );
+          CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status);
+          CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(remind_at);
+        `);
+        console.log('[lobstermind:reminders] Table initialized');
+      }
+    };
+    reminderManager.init();
+
     // Initialize automatic capture statistics
     let autoCaptureStats = {
       totalProcessed: 0,
@@ -613,6 +781,14 @@ export default {
     const processUserInputForMemory = (content: string) => {
       autoCaptureStats.totalProcessed++;
       
+      // === Mejora #1: Track patterns ===
+      // Extract key topics from content (simple keyword extraction)
+      const topicKeywords = content.match(/\b(?:solana|bitcoin|btc|eth|defi|nft|token|wallet|trading|hyperliquid|perps|swap|bridge|airdrop|mint|stake|api|vercel|deploy|skill|plugin|cron|telegram|moltbook)\b/gi);
+      if (topicKeywords) {
+        const uniqueTopics = [...new Set(topicKeywords.map((t: string) => t.toLowerCase()))];
+        uniqueTopics.forEach((topic: string) => patternTracker.track(topic, content));
+      }
+      
       // Add to conversation context for future reference
       conversationContext.addInput(content);
       
@@ -989,33 +1165,6 @@ export default {
           }
         }
       }
-                      processUserInputForMemory(content);
-                    }
-                  }
-                }
-              }
-              else {
-                // General payload processing - might contain content
-                if (typeof payload === 'string') {
-                  console.log(`[lobstermind] Processing string payload from '${eventName}': ${payload.substring(0, 100)}...`);
-                  processUserInputForMemory(payload);
-                } else if (typeof payload === 'object') {
-                  // Try to find a content property
-                  const content = payload.content || payload.text || payload.data?.content || payload.data?.text;
-                  if (content && typeof content === 'string') {
-                    console.log(`[lobstermind] Processing identified content from object payload '${eventName}': ${content.substring(0, 100)}...`);
-                    processUserInputForMemory(content);
-                  }
-                }
-              }
-            });
-            
-            console.log(`[lobstermind] Registered input listener for '${eventName}'`);
-          } catch (e) {
-            console.log(`[lobstermind] Event '${eventName}' not supported:`, e.message);
-          }
-        }
-      }
     }
     
     // Helper function to extract memories from Gigabrain-style <memory_note> tags
@@ -1158,7 +1307,7 @@ export default {
           const c = program.command('memories').description('LobsterMind CLI');
           c.command('list').option('--limit <n>','Max','20').action((o:any)=>{const r=db.prepare('SELECT * FROM memories ORDER BY created_at DESC LIMIT ?').all(parseInt(o.limit)||20);console.log('Memories:',r.length);r.forEach((m:any,i:number)=>console.log((i+1)+'. ['+m.type+'] '+m.content));});
           c.command('add <content>').action((s:string)=>{try{console.log('ID:',save(s));}catch(e:any){console.error('Error:',e.message);}});
-          c.command('search <query>').action(async(q:string)=>{const r=search(q);console.log('Found:',r.length);r.forEach((m:any,i:number)=>console.log((i+1)+'. '+m.content+' ('+m.score.toFixed(2)+')'));});
+          c.command('search <query>').action(async(q:string)=>{const r=searchWithBoost(q);console.log('Found:',r.length);r.forEach((m:any,i:number)=>console.log((i+1)+'. '+m.content+' ('+m.score.toFixed(2)+')'));});
           c.command('stats').action(()=>{const t=db.prepare('SELECT COUNT(*) as c FROM memories').get()as any;console.log('Total:',t.c);});
           c.command('backup').action(()=>{const d=join(ws,'memory','backups');if(!existsSync(d))mkdirSync(d,{recursive:true});const p=join(d,'backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');writeFileSync(p,JSON.stringify(db.prepare('SELECT * FROM memories').all(),null,2));console.log('Backup:',p);});
           // Add command for auto-capture stats
@@ -1191,26 +1340,57 @@ export default {
           // Add command to show memories by cluster
           c.command('cluster <cluster-id>').action((clusterId: string) => {
             const cluster = db.prepare('SELECT * FROM memory_clusters WHERE cluster_id = ?').get(clusterId) as any;
-            if (!cluster) {
-              console.log('Cluster not found');
-              return;
-            }
-            
+            if (!cluster) { console.log('Cluster not found'); return; }
             console.log(`Cluster: ${cluster.name}`);
             console.log(`Description: ${cluster.description}`);
-            
-            const members = db.prepare(`
-              SELECT m.*, cm.similarity_score 
-              FROM cluster_members cm 
-              JOIN memories m ON cm.memory_id = m.id 
-              WHERE cm.cluster_id = ? 
-              ORDER BY cm.similarity_score DESC
-            `).all(clusterId) as any[];
-            
+            const members = db.prepare(`SELECT m.*, cm.similarity_score FROM cluster_members cm JOIN memories m ON cm.memory_id = m.id WHERE cm.cluster_id = ? ORDER BY cm.similarity_score DESC`).all(clusterId) as any[];
             console.log(`Members (${members.length}):`);
-            members.forEach((member: any, i: number) => {
-              console.log(`${i+1}. [${member.type}] ${member.content} (sim: ${member.similarity_score.toFixed(2)})`);
-            });
+            members.forEach((member: any, i: number) => { console.log(`${i+1}. [${member.type}] ${member.content} (sim: ${member.similarity_score.toFixed(2)})`); });
+          });
+          
+          // ===== NEW CLI COMMANDS =====
+          // Mejora #1: Patterns
+          c.command('patterns').description('Show auto-detected patterns').action(() => {
+            const patterns = patternTracker.getPatterns();
+            console.log(`\n🔍 Auto-Detected Patterns (${patterns.length}):`);
+            patterns.forEach((p: any, i: number) => { console.log(`${i+1}. [${p.type}] ${p.content.substring(0, 120)} (confidence: ${p.confidence.toFixed(2)})`); });
+            patternTracker.stats();
+          });
+          
+          // Mejora #2: Reminders
+          c.command('remind <text> <when>').description('Create reminder (when: "30m", "2h", "1d", or ISO date)').action((text: string, when: string) => {
+            let remindAt: string;
+            const now = Date.now();
+            const match = when.match(/^(\d+)(m|h|d)$/);
+            if (match) {
+              const multipliers: Record<string, number> = { m: 60000, h: 3600000, d: 86400000 };
+              remindAt = new Date(now + parseInt(match[1]) * multipliers[match[2]]).toISOString();
+            } else {
+              remindAt = new Date(when).toISOString();
+            }
+            reminderManager.create(text, remindAt);
+            console.log(`⏰ Reminder set for: ${new Date(remindAt).toLocaleString()}`);
+          });
+          c.command('reminders').description('List pending reminders').action(() => {
+            const pending = reminderManager.list();
+            console.log(`\n⏰ Pending Reminders (${pending.length}):`);
+            pending.forEach((r: any, i: number) => { console.log(`${i+1}. [${new Date(r.remind_at).toLocaleString()}] ${r.text}${r.context ? ` (ctx: ${r.context})` : ''}`); });
+          });
+          c.command('reminders-check').description('Check and fire due reminders').action(() => {
+            const due = reminderManager.check();
+            if (due.length === 0) console.log('No reminders due.');
+            else due.forEach((r: any) => { console.log(`🔔 ${r.text}${r.context ? ` — ${r.context}` : ''}`); });
+          });
+          
+          // Mejora #6: Confidence
+          c.command('top').description('Show top confident memories').option('-n, --number <n>', 'Limit', '10').action((o: any) => {
+            const top = confidenceManager.topConfident(parseInt(o.number) || 10);
+            console.log(`\n📊 Top Confident Memories:`);
+            top.forEach((m: any, i: number) => { console.log(`${i+1}. [${m.confidence.toFixed(2)}] [${m.type}] ${m.content.substring(0, 100)}`); });
+          });
+          c.command('decay').description('Run confidence decay manually').action(() => {
+            const count = confidenceManager.decayAll();
+            console.log(`📉 Decayed ${count} memories`);
           });
         },
         {commands: ['memories']}
