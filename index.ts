@@ -141,8 +141,12 @@ export default {
       // Bug 1 fix: Detect if message expresses a preference (should be tracked even with negation)
       isPreferenceStatement(content: string): boolean {
         const lower = content.toLowerCase();
+        // Bug 3 fix: Hypotheses/comparisons are NOT preferences
+        if (/\b(puede\s+ser|ser\xc3\xada\s+como|ser\xc3\xada|podr\xc3\xada\s+ser|imagino|quiz\xc3\xa1s|tal\s+vez|si\s+lo|si\s+te|creo\s+que|parece\s+que)/i.test(lower)) return false;
+        // Bug 4 fix: Technical descriptions/problems are NOT preferences
+        if (/\b(no\s+funciona|no\s+puedo|no\s+tengo|error|fail|sin\s+\w+\s+(no|para)|requiere|necesita|hace\s+falta|no\s+tiene)/i.test(lower)) return false;
         // "no me gusta X" = preference about X
-        if (/\b(no\s+me\s+gusta|no\s+me\s+interesa|odio|detesto|amo|adoro|prefiero|me\s+encanta|me\s+gusta|suele[ns]?\s+usar|siempre\s+uso|nunca\s+uso|evito|me\s+avoid|no\s+soporto|me\s+causa\s+)(\w+)/i.test(lower)) return true;
+        if (/\b(no\s+me\s+gusta|no\s+me\s+interesa|odio|detesto|amo|adoro|prefiero|me\s+encanta|me\s+gusta|suele[ns]?\s+usar|siempre\s+uso|nunca\s+uso|evito|no\s+soporto|me\s+causa\s+)(\w+)/i.test(lower)) return true;
         // "quiero X" / "solo quiero X" = preference
         if (/\b(quiero|solo\s+quiero|me\s+gustar\xc3\xada|me\s+gustar)\s+\w+/i.test(lower)) return true;
         // "me interesa X" / "no me interesa X"
@@ -150,11 +154,23 @@ export default {
         return false;
       },
       
+      // Bug 3+4: Filter hypotheses and technical problems from general tracking too
+      isNoiseMessage(content: string): boolean {
+        const lower = content.toLowerCase();
+        if (/\b(puede\s+ser|ser\xc3\xada\s+como|podr\xc3\xada\s+ser|imagino|creo\s+que|parece\s+que|quiz\xc3\xa1s|tal\s+vez)/i.test(lower)) return true;
+        if (/\b(no\s+funciona|no\s+puedo|no\s+tengo|error|fail|requiere|hace\s+falta|falta)/i.test(lower)) return true;
+        return false;
+      },
+      
       track(content: string) {
         const trimmed = content.trim().toLowerCase();
         if (trimmed.length < 10) return;
+        // Bug 3+4: Filter hypotheses and technical problems
+        if (this.isNoiseMessage(content)) {
+          console.log('[lobstermind:patterns] Skipped: hypothesis/technical noise');
+          return;
+        }
         if (this.isActionMessage(content)) {
-          // Bug 1 fix: But if it's ALSO a preference, still track it
           if (!this.isPreferenceStatement(content)) {
             console.log('[lobstermind:patterns] Skipped: action/question message');
             return;
