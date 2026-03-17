@@ -75,55 +75,112 @@ export default {
       CREATE INDEX IF NOT EXISTS idx_cluster_members_cluster ON cluster_members(cluster_id);
     `);
     
-    // ===== MEJORA #1: Auto-detección de patrones =====
+    // ===== MEJORA #1: Auto-detección de patrones (B+C: Stopwords + Semántica) =====
+    const STOPWORDS = new Set([
+      // Spanish
+      'que','de','el','la','los','las','un','una','unos','unas','en','es','por','con','para','del','al','lo','su','se','yo','me','mi','tu','te','nos','les','más','muy','ya','no','si','pero','como','este','esta','eso','eso','hay','está','son','fue','ser','tiene','puede','tiene','han','esta','todo','esto','tiene','fue','tiene','puede','ser','qué','cuándo','dónde','cómo','bien','mal','ahora','aquí','allí','también','después','antes','entre','sobre','bajo','desde','hasta','otro','otra','cada','donde','cuando','mas','va','voy','vas','tiene','tiene','solo','sii','ok','si','no','estoy','estas','estos','estas','estos','tamos','tamos','ver','ver','ver','cosa','cosas','hacer','dice','dime','dime','dime','pregunta','pregunto','mira','mirame','busca','busque','instala','agrega','crea','dime','puedes','podría','sería','haría','harías','quiero','gustaría','opinas','piensas','cree','crees',
+      // English
+      'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','both','each','few','more','most','other','some','such','no','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','what','which','who','whom','these','those','it','its','my','your','his','her','our','their','i','you','he','she','we','they','me','him','us','them',
+      // Crypto/common filler
+      'clawy','luis','https','github','com','http','repo','link','bien','vale','claro','dime','creo','opino','pues','okey','perfecto','genial','ok','anda','dale','vamos','sigue','listo','vale','ahi','ahi','ahi','no','si','sii','si','si',
+      // Common verbs in conversations
+      'puedo','puedes','pueden','hacer','hago','haces','saber','sé','sabes','quiero','quieres','quiere','gusta','gustaría','vi','revisé','mira','chequea','busca','instala','agrega','crea','arma','dice','dijo','habla','hablé','pienso','piensas','crees','opinas','parece','parece','entiendo','entiendes','entiendo'
+    ]);
+
     const patternTracker = {
-      topicCounts: {} as Record<string, { count: number; lastSeen: string; samples: string[] }>,
-      THRESHOLD: 3, // Si algo se repite 3 veces, es patrón
-      WINDOW_HOURS: 168, // Buscar patrones en última semana
+      recentMessages: [] as { content: string; embedding: number[]; timestamp: string }[],
+      MAX_RECENT: 50, // Track last 50 messages
+      THRESHOLD: 5, // 5 similar messages to trigger pattern
+      SIMILARITY_THRESHOLD: 0.65, // Minimum similarity to group
+      WINDOW_HOURS: 168, // 1 week window
       
-      track(topic: string, content: string) {
-        const key = topic.toLowerCase().trim();
-        if (key.length < 3) return;
+      track(content: string) {
+        const trimmed = content.trim().toLowerCase();
+        if (trimmed.length < 10) return;
         
-        if (!this.topicCounts[key]) {
-          this.topicCounts[key] = { count: 0, lastSeen: '', samples: [] };
+        // Extract meaningful words (no stopwords, min 3 chars)
+        const words = trimmed.split(/[\s,.!?;:'"()¿¡\[\]{}]+/)
+          .filter((w: string) => w.length >= 3 && !STOPWORDS.has(w));
+        
+        if (words.length < 2) return; // Need at least 2 meaningful words
+        
+        const embedding = embed(trimmed);
+        const now = new Date().toISOString();
+        
+        this.recentMessages.push({ content: trimmed, embedding, timestamp: now });
+        
+        // Keep only recent messages
+        if (this.recentMessages.length > this.MAX_RECENT) {
+          this.recentMessages.shift();
         }
-        this.topicCounts[key].count++;
-        this.topicCounts[key].lastSeen = new Date().toISOString();
-        this.topicCounts[key].samples.push(content.substring(0, 100));
         
-        // Keep only last 5 samples
-        if (this.topicCounts[key].samples.length > 5) {
-          this.topicCounts[key].samples.shift();
+        // Check if this message forms a cluster of 5+ similar messages
+        this.checkForPatterns(content);
+      },
+      
+      checkForPatterns(originalContent: string) {
+        if (this.recentMessages.length < this.THRESHOLD) return;
+        
+        const latest = this.recentMessages[this.recentMessages.length - 1];
+        const latestEmb = latest.embedding;
+        
+        // Find how many recent messages are similar to this one
+        let similarCount = 0;
+        const similarMessages: string[] = [];
+        
+        for (const msg of this.recentMessages) {
+          if (msg === latest) continue;
+          
+          const sim = calculateCosineSimilarity(latestEmb, msg.embedding);
+          if (sim >= this.SIMILARITY_THRESHOLD) {
+            similarCount++;
+            similarMessages.push(msg.content.substring(0, 80));
+          }
         }
         
-        console.log(`[lobstermind:patterns] Topic "${key}" count: ${this.topicCounts[key].count}`);
-        
-        // Auto-save as pattern when threshold reached
-        if (this.topicCounts[key].count === this.THRESHOLD) {
-          this.savePattern(key);
+        // If we have enough similar messages, it's a pattern
+        if (similarCount >= this.THRESHOLD - 1) {
+          // Extract the "topic" from meaningful words
+          const words = originalContent.toLowerCase().split(/[\s,.!?;:'"()¿¡\[\]{}]+/)
+            .filter((w: string) => w.length >= 3 && !STOPWORDS.has(w));
+          
+          // Pick top 3 most repeated meaningful words as topic
+          const wordFreq: Record<string, number> = {};
+          for (const msg of this.recentMessages) {
+            const msgWords = msg.content.split(/[\s,.!?;:'"()¿¡\[\]{}]+/)
+              .filter((w: string) => w.length >= 3 && !STOPWORDS.has(w));
+            for (const w of msgWords) {
+              wordFreq[w] = (wordFreq[w] || 0) + 1;
+            }
+          }
+          
+          const topWords = Object.entries(wordFreq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([w]) => w);
+          
+          const topic = topWords.join(', ') || 'tema recurrente';
+          
+          this.savePattern(topic, similarCount + 1, similarMessages);
         }
       },
       
-      savePattern(topic: string) {
-        const data = this.topicCounts[topic];
-        if (!data) return;
+      savePattern(topic: string, count: number, samples: string[]) {
+        const patternContent = `PATRÓN: "${topic}" — detectado ${count} mensajes similares. Ejemplos: ${samples.slice(0, 3).join(' | ')}`;
         
-        const patternContent = `PATRÓN DETECTADO: "${topic}" mencionado ${data.count} veces. Ejemplos: ${data.samples.slice(0, 3).join(' | ')}`;
-        
-        // Check if pattern already exists
-        const existing = search(`PATRÓN DETECTADO: "${topic}"`, 3);
+        // Check if similar pattern already exists
+        const existing = search(`PATRÓN: "${topic}"`, 3);
         const alreadyExists = existing.some((m: any) => m.content.includes(`"${topic}"`) && m.type === 'PATTERN');
         
         if (!alreadyExists) {
           save(patternContent, 'PATTERN', 0.95, '#patron #auto');
-          console.log(`[lobstermind:patterns] ✅ Auto-saved pattern: "${topic}" (${data.count} occurrences)`);
+          console.log(`[lobstermind:patterns] ✅ Auto-saved pattern: "${topic}" (${count} similar messages)`);
         } else {
-          // Update confidence of existing pattern
+          // Update confidence
           const existingId = existing.find((m: any) => m.content.includes(`"${topic}"`) && m.type === 'PATTERN')?.id;
           if (existingId) {
             db.prepare('UPDATE memories SET confidence = MIN(confidence + 0.05, 1.0), updated_at = ? WHERE id = ?').run(new Date().toISOString(), existingId);
-            console.log(`[lobstermind:patterns] 📈 Updated confidence for pattern: "${topic}"`);
+            console.log(`[lobstermind:patterns] 📈 Updated pattern confidence: "${topic}"`);
           }
         }
       },
@@ -133,10 +190,9 @@ export default {
       },
       
       stats() {
-        const patterns = Object.entries(this.topicCounts)
-          .filter(([_, v]) => v.count >= 2)
-          .sort((a, b) => b[1].count - a[1].count);
-        console.log(`[lobstermind:patterns] Top topics: ${patterns.slice(0, 10).map(([k, v]) => `${k}(${v.count})`).join(', ')}`);
+        const tracked = this.recentMessages.length;
+        const patterns = this.getPatterns().length;
+        console.log(`[lobstermind:patterns] Tracking ${tracked} recent messages, ${patterns} patterns detected`);
       }
     };
 
@@ -781,13 +837,8 @@ export default {
     const processUserInputForMemory = (content: string) => {
       autoCaptureStats.totalProcessed++;
       
-      // === Mejora #1: Track patterns ===
-      // Extract key topics from content (simple keyword extraction)
-      const topicKeywords = content.match(/\b(?:solana|bitcoin|btc|eth|defi|nft|token|wallet|trading|hyperliquid|perps|swap|bridge|airdrop|mint|stake|api|vercel|deploy|skill|plugin|cron|telegram|moltbook)\b/gi);
-      if (topicKeywords) {
-        const uniqueTopics = [...new Set(topicKeywords.map((t: string) => t.toLowerCase()))];
-        uniqueTopics.forEach((topic: string) => patternTracker.track(topic, content));
-      }
+      // === Mejora #1: Track patterns (B+C: Stopwords + Semántica) ===
+      patternTracker.track(content);
       
       // Add to conversation context for future reference
       conversationContext.addInput(content);
