@@ -154,6 +154,19 @@ export default {
         return false;
       },
       
+      // Bug 5: Detect explicit user instructions (highest priority)
+      isExplicitInstruction(content: string): boolean {
+        const lower = content.toLowerCase();
+        // "recuerda X" / "no te olvides de X" / "acuerdate de X"
+        if (/\b(recuerda|recuerda\s+esto|no\s+te\s+olvides|no\s+olvides|acu\xc3\xa9rdate|apunta|toma\s+nota|nota\s+esto)/i.test(lower)) return true;
+        // "siempre haz X" / "nunca hagas X" / "cuando X haz Y"
+        if (/\b(siempre|nunca)\s+\w+/i.test(lower)) return true;
+        if (/\b(cuando|cada\s+vez\s+que)\s+\w+.*\b(haz|has|avisa|verifica|revisa|chequea|comunica|escribe|dime)/i.test(lower)) return true;
+        // "importante: X" / "regla: X" / "ojo con X"
+        if (/\b(importante|regla|ojo|atenci\xc3\xb3n|nota|fixe|critical|must|siempre)\s*[:;]/i.test(lower)) return true;
+        return false;
+      },
+      
       // Bug 3+4: Filter hypotheses and technical problems from general tracking too
       isNoiseMessage(content: string): boolean {
         const lower = content.toLowerCase();
@@ -165,6 +178,30 @@ export default {
       track(content: string) {
         const trimmed = content.trim().toLowerCase();
         if (trimmed.length < 10) return;
+        
+        // Bug 5: Explicit instructions → save immediately with highest priority
+        if (this.isExplicitInstruction(content)) {
+          // Extract the instruction content
+          const instMatch = content.match(/(?:recuerda\s+(?:esto)?|no\s+te\s+olvides\s+de?|acu\xc3\xa9rdate\s+de?|apunta|toma\s+nota|nota\s+esto)[:\s]*(.+)/i);
+          const instContent = instMatch ? instMatch[1].trim() : content.substring(0, 120);
+          const fullInstruction = `INSTRUCCIÓN: ${instContent}`;
+          
+          // Check if similar instruction exists
+          const existing = search(`INSTRUCCIÓN: ${instContent.substring(0, 30)}`, 3);
+          if (existing.length === 0) {
+            save(fullInstruction, 'INSTRUCTION', 1.0, '#instruccion #auto');
+            console.log(`[lobstermind:patterns] \u{1f525} Explicit instruction saved: "${instContent.substring(0, 60)}"`);
+          } else {
+            const exId = existing[0]?.id;
+            if (exId) {
+              db.prepare('UPDATE memories SET confidence = 1.0, updated_at = ? WHERE id = ?')
+                .run(new Date().toISOString(), exId);
+              console.log(`[lobstermind:patterns] \u{1f525} Reinforced instruction: "${instContent.substring(0, 60)}"`);
+            }
+          }
+          return;
+        }
+        
         // Bug 3+4: Filter hypotheses and technical problems
         if (this.isNoiseMessage(content)) {
           console.log('[lobstermind:patterns] Skipped: hypothesis/technical noise');
