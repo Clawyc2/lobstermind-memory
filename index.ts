@@ -131,9 +131,22 @@ export default {
       
       isActionMessage(content: string): boolean {
         const lower = content.toLowerCase().trim();
+        // Bug 2 fix: "quiero" + noun = preference, not action. Only filter "quiero" when followed by "que" (question)
         if (/^(busca|revisa|chequea|instala|agrega|crea|arma|haz|fork|mira|abre|lee|descarga|ejecuta|corre|prueba|verifica|compara|analiza|explica|mu\xc3\xa9strame|dame|lista|enumera|describe|resume|borra|elimina|modifica|cambia|actualiza)/i.test(lower)) return true;
         if (/[?]/.test(lower)) return true;
         if (/^(qu\xc3\xa9|como|c\xc3\xb3mo|cu\xc3\xa1l|cuales|qui\xc3\xa9n|d\xc3\xb3nde|cu\xc3\xa1ndo|por qu\xc3\xa9|para qu\xc3\xa9|es esto|qu\xc3\xa9 es|es posible|se puede|podemos|puedo)/i.test(lower)) return true;
+        return false;
+      },
+      
+      // Bug 1 fix: Detect if message expresses a preference (should be tracked even with negation)
+      isPreferenceStatement(content: string): boolean {
+        const lower = content.toLowerCase();
+        // "no me gusta X" = preference about X
+        if (/\b(no\s+me\s+gusta|no\s+me\s+interesa|odio|detesto|amo|adoro|prefiero|me\s+encanta|me\s+gusta|suele[ns]?\s+usar|siempre\s+uso|nunca\s+uso|evito|me\s+avoid|no\s+soporto|me\s+causa\s+)(\w+)/i.test(lower)) return true;
+        // "quiero X" / "solo quiero X" = preference
+        if (/\b(quiero|solo\s+quiero|me\s+gustar\xc3\xada|me\s+gustar)\s+\w+/i.test(lower)) return true;
+        // "me interesa X" / "no me interesa X"
+        if (/\b(me\s+interesa|no\s+me\s+interesa)\s+\w+/i.test(lower)) return true;
         return false;
       },
       
@@ -141,8 +154,12 @@ export default {
         const trimmed = content.trim().toLowerCase();
         if (trimmed.length < 10) return;
         if (this.isActionMessage(content)) {
-          console.log('[lobstermind:patterns] Skipped: action/question message');
-          return;
+          // Bug 1 fix: But if it's ALSO a preference, still track it
+          if (!this.isPreferenceStatement(content)) {
+            console.log('[lobstermind:patterns] Skipped: action/question message');
+            return;
+          }
+          console.log('[lobstermind:patterns] Action message BUT contains preference - tracking');
         }
         const words = this.extractMeaningfulWords(content);
         if (words.length < 2) return;
@@ -150,6 +167,33 @@ export default {
         const now = new Date().toISOString();
         this.recentMessages.push({ content: trimmed, embedding, timestamp: now });
         if (this.recentMessages.length > this.MAX_RECENT) this.recentMessages.shift();
+        
+        // Bug 1+2 fix: Explicit preference statements save immediately (no need for 5 messages)
+        if (this.isPreferenceStatement(content)) {
+          const words = this.extractMeaningfulWords(content);
+          const topic = words.slice(0, 3).join(', ') || 'preferencia';
+          // Extract the object of preference
+          const prefMatch = content.match(/(?:no\s+me\s+gusta|odio|prefiero|me\s+gusta|me\s+encanta|amo|adoro|quiero|solo\s+quiero|no\s+quiero|evito|siempre\s+uso|nunca\s+uso|me\s+interesa|no\s+me\s+interesa)\s+(.+)/i);
+          const prefObject = prefMatch ? prefMatch[1].trim().substring(0, 80) : content.substring(0, 80);
+          const prefContent = `PREFERENCIA: "${prefObject}" (detectado en: "${content.substring(0, 80)}")`;
+          
+          // Check if similar preference already exists
+          const existing = search(`PREFERENCIA: "${prefObject.substring(0, 30)}`, 3);
+          if (existing.length === 0) {
+            save(prefContent, 'PREFERENCE', 0.98, '#preferencia #auto');
+            console.log(`[lobstermind:patterns] \u2705 Direct preference saved: "${prefObject}"`);
+          } else {
+            // Boost existing preference
+            const exId = existing[0]?.id;
+            if (exId) {
+              db.prepare('UPDATE memories SET confidence = MIN(confidence + 0.03, 1.0), updated_at = ? WHERE id = ?')
+                .run(new Date().toISOString(), exId);
+              console.log(`[lobstermind:patterns] \u{1f4c8} Boosted existing preference: "${prefObject}"`);
+            }
+          }
+          return; // Don't also check for regular patterns
+        }
+        
         this.checkForPatterns(content, words);
       },
       
@@ -240,9 +284,15 @@ export default {
         
         if (exactMatch) {
           const latestSample = samples[samples.length - 1] || '';
-          const hasNegation = /\b(no\s+me\s+gusta|odio|no\s+quiero|no\s+uso|nunca|ya\s+no|cambi|prefer|sol|antes|ya\s+no)/i.test(latestSample);
+          // Bug 1 fix: Only flag as contradiction if existing pattern was positive AND new is negative
+          // "no me gusta" alone = preference, not contradiction
+          // Contradiction = existing was "me gusta X" + new is "ya no me gusta X" or "no quiero X"
+          const existingLower = exactMatch.content.toLowerCase();
+          const wasPositive = /me\s+gusta|me\s+interesa|prefiero|siempre\s+uso|amo|adoro|encanta/i.test(existingLower);
+          const hasRealContradiction = /\b(ya\s+no|ya\s+nunca|ya\s+cambi|ya\s+no\s+uso|ya\s+no\s+quiero|cambi|de\s+opinion|antes\s+(s[ií]|usaba|prefer))/i.test(latestSample);
+          const hasNewPreference = /\b(no\s+me\s+gusta|odio|no\s+quiero|no\s+uso|prefiero|me\s+gusta|me\s+interesa|me\s+encanta)/i.test(latestSample);
           
-          if (hasNegation && !exactMatch.content.includes('ACTUALIZADO')) {
+          if (wasPositive && hasRealContradiction && !exactMatch.content.includes('ACTUALIZADO')) {
             const updatedContent = exactMatch.content + `\n\u26a0\ufe0f ACTUALIZADO: Posible contradiccion. Nuevo contexto: "${latestSample}"`;
             db.prepare('UPDATE memories SET content = ?, updated_at = ? WHERE id = ?')
               .run(updatedContent, new Date().toISOString(), exactMatch.id);
